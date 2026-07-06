@@ -55,11 +55,15 @@ function calculate() {
         )
         .join("")}
       <div class="result-card">
-        <div class="label">Összes befektetés</div>
+        <div class="label">Összes befektetés (tét)</div>
         <div class="value">${fmtUsd(totalStake)}</div>
       </div>
       <div class="result-card">
-        <div class="label">Garantált nyereség, ha a 4 közül bármelyik bejön</div>
+        <div class="label">Teljes kifizetés a nyertes lábon (tét + profit)</div>
+        <div class="value">${fmtUsd(shares)}</div>
+      </div>
+      <div class="result-card">
+        <div class="label">Ebből tiszta nyereség a befektetett pénzen felül</div>
         <div class="value" style="color:var(--green);">${fmtUsd(profit)}</div>
       </div>
       <div class="result-card">
@@ -67,6 +71,11 @@ function calculate() {
         <div class="value" style="color:var(--red);">${fmtUsd(totalStake)}</div>
       </div>
     </div>
+    <p class="muted" style="font-size:13px;margin-top:14px;">
+      ${fmtUsd(totalStake)} tét + ${fmtUsd(profit)} profit = ${fmtUsd(shares)} kifizetés arra a sávra,
+      amelyik bejön — ugyanennyi ${fmtUsd(shares)} jön vissza bármelyik nyertes lábon, csak a hozzá tartozó
+      tét (és így az abból számolt tiszta nyereség) más-más összegű volt sávanként.
+    </p>
   `;
 }
 
