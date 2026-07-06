@@ -14,6 +14,31 @@ function bucketLabel(b) {
   return b.groupItemTitle || b.outcomes[0] || b.question;
 }
 
+function parseBucketRange(label) {
+  const clean = (label || "").trim();
+  if (clean.endsWith("+")) {
+    return { min: parseInt(clean, 10), max: Infinity };
+  }
+  if (clean.startsWith("<")) {
+    return { min: 0, max: parseInt(clean.slice(1), 10) - 1 };
+  }
+  const parts = clean.split("-").map((n) => parseInt(n, 10));
+  if (parts.length === 2 && !parts.some(isNaN)) {
+    return { min: parts[0], max: parts[1] };
+  }
+  return null;
+}
+
+function findMatchingBucketToken(buckets, liveCount) {
+  for (const b of buckets) {
+    const range = parseBucketRange(bucketLabel(b));
+    if (range && liveCount >= range.min && liveCount <= range.max) {
+      return b.tokenIds[0];
+    }
+  }
+  return null;
+}
+
 function renderSkeleton(event) {
   const weekly = isWeeklyRangeEvent(event);
   contentEl.innerHTML = `
@@ -31,6 +56,14 @@ function renderSkeleton(event) {
         <span id="statusText">Betöltés...</span>
         <button id="refreshBtn">Frissítés</button>
       </div>
+    </div>
+
+    <div class="panel">
+      <div class="card-head">
+        <h3>Élő tweet-szám ebben az időszakban</h3>
+        <span class="muted" style="font-size:12px;">forrás: xtracker.polymarket.com (a piac hivatalos elszámolási forrása)</span>
+      </div>
+      <div id="liveCountBox" class="loading">Betöltés...</div>
     </div>
 
     <div class="panel">
@@ -62,7 +95,7 @@ function renderBuckets(buckets) {
       const price = b.prices[0] || 0;
       const checked = selectedBuckets.has(b.tokenIds[0]) ? "checked" : "";
       return `
-        <tr class="${i < 3 ? "top-row" : ""}">
+        <tr class="${i < 3 ? "top-row" : ""}" data-row-token="${b.tokenIds[0]}">
           <td><input type="checkbox" data-token="${b.tokenIds[0]}" data-price="${(price * 100).toFixed(2)}" class="bucket-check" ${checked}></td>
           <td>${bucketLabel(b)}</td>
           <td>${fmtPct(price)} (${(price * 100).toFixed(1)}c)</td>
@@ -103,6 +136,50 @@ function sendSelectedToCalculator() {
   const prices = checks.slice(0, 4).map((c) => c.dataset.price);
   localStorage.setItem("calc_prefill", JSON.stringify(prices));
   window.location.href = "calculator.html";
+}
+
+async function updateLiveCount(event, buckets) {
+  const box = document.getElementById("liveCountBox");
+  if (!box) return;
+  try {
+    const trackings = await fetchElonTrackings();
+    const window_ = findTrackingWindow(trackings, event.title);
+    if (!window_) {
+      box.innerHTML = '<p class="muted">Ehhez a piachoz nincs egyező élő számláló az xtracker-en (cím nem egyezik).</p>';
+      return;
+    }
+
+    const posts = await fetchElonPosts();
+    const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
+    const matchToken = findMatchingBucketToken(buckets, count);
+
+    document.querySelectorAll("#bucketRows tr").forEach((tr) => {
+      tr.classList.toggle("live-match", tr.dataset.rowToken === matchToken);
+    });
+
+    const matchLabel = matchToken
+      ? bucketLabel(buckets.find((b) => b.tokenIds[0] === matchToken))
+      : "nincs egyező sáv";
+
+    box.innerHTML = `
+      <div class="result-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+        <div class="result-card">
+          <div class="label">Eddigi tweet-szám ebben az időszakban</div>
+          <div class="value">${count}</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Jelenleg ebbe a sávba esne</div>
+          <div class="value" style="color:var(--green);">${matchLabel}</div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:10px;">
+        Számlálási ablak: ${new Date(window_.startDate).toLocaleString("hu-HU")} –
+        ${new Date(window_.endDate).toLocaleString("hu-HU")}
+      </p>
+    `;
+  } catch (e) {
+    box.innerHTML = `<p class="muted">Élő tweet-szám jelenleg nem elérhető (${e.message}).</p>`;
+  }
 }
 
 async function renderChart(topBuckets) {
@@ -154,6 +231,7 @@ async function loadAndRender(isManualRefresh) {
       .filter((m) => m.prices.length && m.tokenIds.length);
 
     const sorted = renderBuckets(buckets);
+    await updateLiveCount(event, buckets);
     if (isManualRefresh === undefined) {
       await renderChart(sorted.slice(0, 3));
     }
@@ -177,6 +255,7 @@ async function init() {
       .map(normalizeMarket)
       .filter((m) => m.prices.length && m.tokenIds.length);
     const sorted = renderBuckets(buckets);
+    await updateLiveCount(event, buckets);
     await renderChart(sorted.slice(0, 3));
     document.getElementById("statusText").textContent =
       "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");

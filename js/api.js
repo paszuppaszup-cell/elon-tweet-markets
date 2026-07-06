@@ -1,6 +1,51 @@
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
+const XTRACKER_BASE = "https://xtracker.polymarket.com";
 const CACHE_TTL_MS = 30000;
+
+// xtracker.polymarket.com az a hivatalos "Post Counter" forras, amit Polymarket
+// maga hasznal e piacok elszamolasahoz (lasd a piac leirasaban a resolutionSource
+// mezot). Nem harmadik feles scraping - ugyanaz a nyilvanos, CORS-nyitott API,
+// amit a sajat oldaluk is hasznal.
+let elonPostsCache = null;
+let elonPostsFetchedAt = 0;
+const ELON_POSTS_TTL_MS = 120000;
+
+async function fetchElonPosts() {
+  if (elonPostsCache && Date.now() - elonPostsFetchedAt < ELON_POSTS_TTL_MS) {
+    return elonPostsCache;
+  }
+  const resp = await fetch(`${XTRACKER_BASE}/api/users/elonmusk/posts`);
+  if (!resp.ok) throw new Error(`xtracker HTTP ${resp.status}`);
+  const data = await resp.json();
+  elonPostsCache = data.data || [];
+  elonPostsFetchedAt = Date.now();
+  return elonPostsCache;
+}
+
+// A Gamma esemeny startDate/endDate mezoje NEM ugyanaz, mint a tenyleges
+// tweet-szamlalasi ablak (a gamma datum a piac kereskedesi megnyitasat/zarasat
+// jeloli, ami korabban nyilik es kesobb zar, mint a szamlalt idoszak). A
+// xtracker "tracking" rekordja tartalmazza a pontos, hivatalos szamlalasi
+// ablakot ugyanazzal a cimmel, mint a Polymarket esemeny - ezt kell hasznalni.
+async function fetchElonTrackings() {
+  const data = await fetchJson(`${XTRACKER_BASE}/api/users/elonmusk`, "elon-user");
+  return (data.data && data.data.trackings) || [];
+}
+
+function findTrackingWindow(trackings, eventTitle) {
+  const match = trackings.find((t) => t.title === eventTitle);
+  return match ? { startDate: match.startDate, endDate: match.endDate } : null;
+}
+
+function countPostsInWindow(posts, startIso, endIso) {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  return posts.reduce((n, p) => {
+    const t = new Date(p.createdAt).getTime();
+    return t >= start && t <= end ? n + 1 : n;
+  }, 0);
+}
 
 function cacheGet(key) {
   try {
