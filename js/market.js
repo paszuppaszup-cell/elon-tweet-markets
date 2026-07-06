@@ -1,0 +1,189 @@
+const REFRESH_MS = 60000;
+const contentEl = document.getElementById("content");
+const params = new URLSearchParams(window.location.search);
+const eventId = params.get("id");
+
+let chartInstance = null;
+const selectedBuckets = new Set();
+
+function fmtPct(p) {
+  return (p * 100).toFixed(1) + "%";
+}
+
+function bucketLabel(b) {
+  return b.groupItemTitle || b.outcomes[0] || b.question;
+}
+
+function renderSkeleton(event) {
+  const weekly = isWeeklyRangeEvent(event);
+  contentEl.innerHTML = `
+    <div class="panel">
+      <div class="card-head">
+        <h3 style="font-size:20px;">${event.title}</h3>
+        <span class="badge ${weekly ? "" : "monthly"}">${weekly ? "heti" : "havi"}</span>
+      </div>
+      <p class="muted">
+        Indul: ${new Date(event.startDate).toLocaleString("hu-HU")} ·
+        Zárás: ${new Date(event.endDate).toLocaleString("hu-HU")} ·
+        Volumen: $${Number(event.volume || 0).toLocaleString("hu-HU", { maximumFractionDigits: 0 })}
+      </p>
+      <div class="status-bar">
+        <span id="statusText">Betöltés...</span>
+        <button id="refreshBtn">Frissítés</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <canvas id="priceChart" height="90"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="card-head">
+        <h3>Sávok (élő valószínűség)</h3>
+        <button id="sendToCalcBtn">Kiválasztottak → kalkulátor</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th></th><th>Sáv</th><th>Ár / valószínűség</th><th></th><th>Volumen</th></tr>
+        </thead>
+        <tbody id="bucketRows"></tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById("refreshBtn").addEventListener("click", () => loadAndRender(true));
+  document.getElementById("sendToCalcBtn").addEventListener("click", sendSelectedToCalculator);
+}
+
+function renderBuckets(buckets) {
+  const rows = document.getElementById("bucketRows");
+  const sorted = [...buckets].sort((a, b) => b.prices[0] - a.prices[0]);
+  rows.innerHTML = sorted
+    .map((b, i) => {
+      const price = b.prices[0] || 0;
+      const checked = selectedBuckets.has(b.tokenIds[0]) ? "checked" : "";
+      return `
+        <tr class="${i < 3 ? "top-row" : ""}">
+          <td><input type="checkbox" data-token="${b.tokenIds[0]}" data-price="${(price * 100).toFixed(2)}" class="bucket-check" ${checked}></td>
+          <td>${bucketLabel(b)}</td>
+          <td>${fmtPct(price)} (${(price * 100).toFixed(1)}c)</td>
+          <td style="width:120px;"><div class="bar-track"><div class="bar-fill" style="width:${Math.min(price * 100, 100)}%"></div></div></td>
+          <td class="muted">$${b.volume.toLocaleString("hu-HU", { maximumFractionDigits: 0 })}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  rows.querySelectorAll(".bucket-check").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const token = e.target.dataset.token;
+      const price = e.target.dataset.price;
+      if (e.target.checked) {
+        if (selectedBuckets.size >= 4) {
+          e.target.checked = false;
+          alert("Legfeljebb 4 sávot választhatsz ki a kalkulátorhoz.");
+          return;
+        }
+        selectedBuckets.add(token);
+        e.target.dataset.priceValue = price;
+      } else {
+        selectedBuckets.delete(token);
+      }
+    });
+  });
+
+  return sorted;
+}
+
+function sendSelectedToCalculator() {
+  const checks = [...document.querySelectorAll(".bucket-check:checked")];
+  if (!checks.length) {
+    alert("Jelölj be legalább egy sávot.");
+    return;
+  }
+  const prices = checks.slice(0, 4).map((c) => c.dataset.price);
+  localStorage.setItem("calc_prefill", JSON.stringify(prices));
+  window.location.href = "calculator.html";
+}
+
+async function renderChart(topBuckets) {
+  const ctx = document.getElementById("priceChart");
+  const datasets = [];
+  const colors = ["#4f8cff", "#2ecc71", "#f5b942"];
+
+  for (let i = 0; i < Math.min(3, topBuckets.length); i++) {
+    const b = topBuckets[i];
+    try {
+      const history = await fetchPriceHistory(b.tokenIds[0], "1w", 60);
+      datasets.push({
+        label: bucketLabel(b),
+        data: history.map((h) => ({ x: h.t * 1000, y: h.p * 100 })),
+        borderColor: colors[i],
+        backgroundColor: colors[i],
+        pointRadius: 0,
+        borderWidth: 2,
+        tension: 0.15,
+      });
+    } catch (e) {
+      /* ha egy sav historyja nem elerheto, csak kihagyjuk */
+    }
+  }
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true,
+      scales: {
+        x: { type: "time", time: { unit: "hour" }, ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
+        y: { ticks: { color: "#8b93a7", callback: (v) => v + "%" }, grid: { color: "#232b3d" } },
+      },
+      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+    },
+  });
+}
+
+async function loadAndRender(isManualRefresh) {
+  const statusEl = document.getElementById("statusText");
+  if (statusEl) statusEl.textContent = "Frissítés...";
+  try {
+    const event = await fetchEventById(eventId);
+    const buckets = (event.markets || [])
+      .filter((m) => m.active && !m.closed)
+      .map(normalizeMarket)
+      .filter((m) => m.prices.length && m.tokenIds.length);
+
+    const sorted = renderBuckets(buckets);
+    if (isManualRefresh === undefined) {
+      await renderChart(sorted.slice(0, 3));
+    }
+    document.getElementById("statusText").textContent =
+      "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "Hiba: " + e.message;
+  }
+}
+
+async function init() {
+  if (!eventId) {
+    contentEl.innerHTML = '<p class="muted">Hiányzó piac azonosító.</p>';
+    return;
+  }
+  try {
+    const event = await fetchEventById(eventId);
+    renderSkeleton(event);
+    const buckets = (event.markets || [])
+      .filter((m) => m.active && !m.closed)
+      .map(normalizeMarket)
+      .filter((m) => m.prices.length && m.tokenIds.length);
+    const sorted = renderBuckets(buckets);
+    await renderChart(sorted.slice(0, 3));
+    document.getElementById("statusText").textContent =
+      "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
+    setInterval(() => loadAndRender(true), REFRESH_MS);
+  } catch (e) {
+    contentEl.innerHTML = `<p class="muted">Hiba az adatok betöltésekor: ${e.message}</p>`;
+  }
+}
+
+init();
