@@ -85,11 +85,17 @@ async function loadAccount(address) {
   statusEl.textContent = "Frissítés...";
 
   try {
-    const [value, positions, trades] = await Promise.all([
+    const [value, allPositions, trades] = await Promise.all([
       fetchPortfolioValue(address),
       fetchPositions(address),
       fetchUserTrades(address, 30),
     ]);
+
+    // A /positions vegpont MINDEN valaha volt poziciot visszaad, a mar
+    // lezart (feloldott) piacokat is - a "redeemable: true" jeloli, hogy a
+    // piac mar lezarult es a token feloldhato/feloldva. A Polymarket sajat
+    // feluleten "nyitott poziciokent" csak a redeemable:false-ak szamitanak.
+    const positions = allPositions.filter((p) => p.redeemable === false);
 
     document.getElementById("portfolioValue").textContent = fmtUsd(value);
     document.getElementById("positionsCount").textContent = positions.length;
