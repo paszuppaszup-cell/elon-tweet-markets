@@ -1,7 +1,28 @@
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
 const XTRACKER_BASE = "https://xtracker.polymarket.com";
+const DATA_API_BASE = "https://data-api.polymarket.com";
 const CACHE_TTL_MS = 30000;
+
+// Csak a publikus Polygon wallet-cim kell - ez lanc-adat, barki lekerdezheti
+// barkinek a cimehez, nem titkos. Nincs sukseg API-kulcsra/private key-re
+// olvasashoz, es a site soha nem is fog ilyet kerni.
+function isValidPolygonAddress(addr) {
+  return /^0x[a-fA-F0-9]{40}$/.test((addr || "").trim());
+}
+
+async function fetchPortfolioValue(address) {
+  const data = await fetchJson(`${DATA_API_BASE}/value?user=${address}`, `value-${address}`);
+  return (data && data[0] && data[0].value) || 0;
+}
+
+async function fetchPositions(address) {
+  return fetchJson(`${DATA_API_BASE}/positions?user=${address}`, `positions-${address}`);
+}
+
+async function fetchUserTrades(address, limit = 30) {
+  return fetchJson(`${DATA_API_BASE}/trades?user=${address}&limit=${limit}`, `trades-${address}`);
+}
 
 // xtracker.polymarket.com az a hivatalos "Post Counter" forras, amit Polymarket
 // maga hasznal e piacok elszamolasahoz (lasd a piac leirasaban a resolutionSource

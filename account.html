@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiókom — Elon Musk Tweet Piacok</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Elon Musk Tweet Piacok</h1>
+  <nav>
+    <a href="index.html">Piacok</a>
+    <a href="calculator.html">Kalkulátor</a>
+    <a href="account.html" class="active">Fiókom</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h3 style="margin-top:0;">Csak a publikus wallet-címed kell</h3>
+    <p class="muted" style="font-size:14px;">
+      Ehhez <b>nem kell API-kulcs, private key vagy jelszó</b> — csak a Polygon
+      wallet-címed (0x-szal kezdődő, 42 karakteres cím), amivel a Polymarketen
+      kereskedsz. Ez lánc-adat: bárki lekérdezheti bárki pozícióit a publikus
+      címe alapján, ugyanúgy, ahogy egy Bitcoin-címet is bárki megnézhet.
+      <b>Soha ne adj meg private key-t vagy seed phrase-t sehol</b> — arra
+      semmilyen funkcióhoz nincs szükség.
+    </p>
+    <p class="muted" style="font-size:13px;">
+      A címedet a Polymarket profilodon találod (a profil URL-je vagy a
+      wallet-ikon alatt, "0x..."-szal kezdődik). A cím csak a te böngésződben,
+      helyben (localStorage) tárolódik, sehova máshova nem küldjük.
+    </p>
+    <div class="calc-grid" style="grid-template-columns: 1fr auto;">
+      <div class="field">
+        <label>Wallet cím (0x...)</label>
+        <input type="text" id="addressInput" placeholder="0x1234...abcd">
+      </div>
+      <div class="field" style="justify-content:flex-end;display:flex;align-items:flex-end;">
+        <button id="loadBtn">Betöltés</button>
+      </div>
+    </div>
+    <div id="errorBox"></div>
+  </div>
+
+  <div id="accountContent"></div>
+</main>
+<footer>Adatok: Polymarket publikus Data API (data-api.polymarket.com), csak olvasás.</footer>
+<script src="js/api.js"></script>
+<script src="js/account.js"></script>
+</body>
+</html>
