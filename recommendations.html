@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Javaslatok — Elon Musk Tweet Piacok</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Elon Musk Tweet Piacok</h1>
+  <nav>
+    <a href="index.html">Piacok</a>
+    <a href="calculator.html">Kalkulátor</a>
+    <a href="account.html">Fiókom</a>
+    <a href="recommendations.html" class="active">Javaslatok</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h3 style="margin-top:0;">Beállítások</h3>
+    <p class="muted" style="font-size:13px;">
+      Ugyanaz a logika, mint a Telegram-bot (<code>alerts.py</code>) használ: minden
+      aktív Elon Musk tweet-szám eseményen a legvalószínűbb sávoktól kezdve addig
+      gyűjt sávokat egy kombinációba, amíg az áraik összege 1 alatt marad. Ez a
+      beállítás csak ebben a böngészőben (localStorage) tárolódik — <b>nincs
+      automatikus szinkron a helyi Telegram-bot <code>.env</code> fájljával</b>,
+      külön-külön kell módosítanod mindkét helyen, ha egyeznie kell.
+    </p>
+    <div class="calc-grid">
+      <div class="field">
+        <label>Cél profit ($)</label>
+        <input type="number" id="cfgProfit" min="1" step="1">
+      </div>
+      <div class="field">
+        <label>Max óra a zárásig</label>
+        <input type="number" id="cfgMaxHours" min="1" step="1">
+      </div>
+      <div class="field">
+        <label>Min. sáv/kombináció</label>
+        <input type="number" id="cfgMinLegs" min="2" step="1">
+      </div>
+      <div class="field">
+        <label>Max. sáv/kombináció</label>
+        <input type="number" id="cfgMaxLegs" min="2" step="1">
+      </div>
+      <div class="field">
+        <label>Min. megtérülés (%)</label>
+        <input type="number" id="cfgMinReturn" min="0" step="1">
+      </div>
+    </div>
+    <button id="saveCfgBtn">Mentés + újraszámolás</button>
+  </div>
+
+  <div class="status-bar">
+    <span id="statusText">Betöltés...</span>
+    <button id="refreshBtn">Frissítés</button>
+  </div>
+
+  <div id="recList"></div>
+</main>
+<footer>Adatok: Polymarket Gamma API (nyilvános, élő). Nem befektetési tanács.</footer>
+<script src="js/api.js?v=2"></script>
+<script src="js/recommendations.js?v=1"></script>
+</body>
+</html>
