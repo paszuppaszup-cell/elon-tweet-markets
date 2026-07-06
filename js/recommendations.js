@@ -1,5 +1,4 @@
 const REFRESH_MS = 60000;
-const CONFIG_KEY = "alert_recommendation_config";
 const DEFAULT_CONFIG = {
   targetProfit: 20,
   maxHours: 48,
@@ -10,19 +9,21 @@ const DEFAULT_CONFIG = {
 
 const recList = document.getElementById("recList");
 const statusEl = document.getElementById("statusText");
+const cfgErrorBox = document.getElementById("cfgErrorBox");
+const configSourceNote = document.getElementById("configSourceNote");
 
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
-  } catch (e) {
-    return { ...DEFAULT_CONFIG };
-  }
-}
+let currentConfig = { ...DEFAULT_CONFIG };
+let alertedComboKeys = new Set();
 
-function saveConfig(config) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+function rowToConfig(row) {
+  return {
+    targetProfit: Number(row.target_profit),
+    maxHours: Number(row.max_hours),
+    minLegs: Number(row.min_legs),
+    maxLegs: Number(row.max_legs),
+    minReturnPct: Number(row.min_return_pct),
+    updatedAt: row.updated_at,
+  };
 }
 
 function readConfigForm() {
@@ -97,8 +98,10 @@ function computeOpportunity(event, config) {
   if (returnPct < config.minReturnPct) return null;
 
   const stakes = combo.map((b) => ({ ...b, stake: shares * b.price }));
+  const comboKey = event.id + ":" + [...combo.map((b) => b.tokenId)].sort().join(",");
+  const alreadyAlerted = alertedComboKeys.has(comboKey);
 
-  return { event, hours, stakes, sumPrice: total, totalStake, shares, profit, returnPct };
+  return { event, hours, stakes, sumPrice: total, totalStake, shares, profit, returnPct, alreadyAlerted };
 }
 
 function renderOpportunity(opp) {
@@ -119,6 +122,7 @@ function renderOpportunity(opp) {
         <h3><a href="market.html?id=${opp.event.id}" style="color:inherit;">${opp.event.title}</a></h3>
         <span class="badge">${opp.hours.toFixed(1)} óra a zárásig</span>
       </div>
+      ${opp.alreadyAlerted ? '<p style="font-size:12px;color:var(--yellow);margin:6px 0 0;">Erről már ment Telegram-értesítés</p>' : ""}
       <table style="margin-top:10px;">
         <thead><tr><th>Sáv</th><th>Ár</th><th>Tét</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -148,10 +152,14 @@ function fmtUsd(n) {
 async function refresh() {
   statusEl.textContent = "Frissítés...";
   try {
-    const events = await searchElonTweetEvents();
-    const config = loadConfig();
+    const [events, alerted] = await Promise.all([
+      searchElonTweetEvents(),
+      fetchSentAlertComboKeys().catch(() => new Set()),
+    ]);
+    alertedComboKeys = alerted;
+
     const opportunities = events
-      .map((e) => computeOpportunity(e, config))
+      .map((e) => computeOpportunity(e, currentConfig))
       .filter(Boolean)
       .sort((a, b) => b.returnPct - a.returnPct);
 
@@ -165,13 +173,43 @@ async function refresh() {
   }
 }
 
-document.getElementById("saveCfgBtn").addEventListener("click", () => {
-  const config = readConfigForm();
-  saveConfig(config);
+async function loadSharedConfigAndRender() {
+  try {
+    const row = await fetchSharedConfig();
+    if (row) {
+      currentConfig = rowToConfig(row);
+      configSourceNote.textContent =
+        "Megosztott beállítás, utoljára módosítva: " + new Date(row.updated_at).toLocaleString("hu-HU");
+    }
+  } catch (e) {
+    configSourceNote.textContent = "Nem sikerült betölteni a megosztott beállítást, alapértékek használva.";
+  }
+  fillConfigForm(currentConfig);
   refresh();
+}
+
+document.getElementById("saveCfgBtn").addEventListener("click", async () => {
+  cfgErrorBox.innerHTML = "";
+  const pin = document.getElementById("cfgPin").value.trim();
+  if (!pin) {
+    cfgErrorBox.innerHTML = '<div class="error-box">Add meg a PIN-kódot a mentéshez.</div>';
+    return;
+  }
+  const config = readConfigForm();
+  try {
+    const ok = await saveSharedConfig(pin, config);
+    if (!ok) {
+      cfgErrorBox.innerHTML = '<div class="error-box">Hibás PIN — a mentés nem történt meg.</div>';
+      return;
+    }
+    document.getElementById("cfgPin").value = "";
+    await loadSharedConfigAndRender();
+  } catch (e) {
+    cfgErrorBox.innerHTML = `<div class="error-box">Hiba mentés közben: ${e.message}</div>`;
+  }
 });
+
 document.getElementById("refreshBtn").addEventListener("click", refresh);
 
-fillConfigForm(loadConfig());
-refresh();
+loadSharedConfigAndRender();
 setInterval(refresh, REFRESH_MS);

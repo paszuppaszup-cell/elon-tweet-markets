@@ -23,10 +23,11 @@
       Ugyanaz a logika, mint a Telegram-bot (<code>alerts.py</code>) használ: minden
       aktív Elon Musk tweet-szám eseményen a legvalószínűbb sávoktól kezdve addig
       gyűjt sávokat egy kombinációba, amíg az áraik összege 1 alatt marad. Ez a
-      beállítás csak ebben a böngészőben (localStorage) tárolódik — <b>nincs
-      automatikus szinkron a helyi Telegram-bot <code>.env</code> fájljával</b>,
-      külön-külön kell módosítanod mindkét helyen, ha egyeznie kell.
+      beállítás <b>megosztott</b> a Telegram-bottal (egy közös adatbázisban van) —
+      ha itt módosítod, a bot is ezt fogja használni a következő ellenőrzésnél.
+      Az olvasás mindenkinek nyitott, de a <b>mentéshez PIN-kód kell</b>.
     </p>
+    <div id="configSourceNote" class="muted" style="font-size:12px;"></div>
     <div class="calc-grid">
       <div class="field">
         <label>Cél profit ($)</label>
@@ -48,8 +49,13 @@
         <label>Min. megtérülés (%)</label>
         <input type="number" id="cfgMinReturn" min="0" step="1">
       </div>
+      <div class="field">
+        <label>PIN (mentéshez)</label>
+        <input type="password" id="cfgPin" inputmode="numeric" placeholder="••••">
+      </div>
     </div>
     <button id="saveCfgBtn">Mentés + újraszámolás</button>
+    <div id="cfgErrorBox"></div>
   </div>
 
   <div class="status-bar">
@@ -60,7 +66,7 @@
   <div id="recList"></div>
 </main>
 <footer>Adatok: Polymarket Gamma API (nyilvános, élő). Nem befektetési tanács.</footer>
-<script src="js/api.js?v=2"></script>
-<script src="js/recommendations.js?v=1"></script>
+<script src="js/api.js?v=3"></script>
+<script src="js/recommendations.js?v=2"></script>
 </body>
 </html>

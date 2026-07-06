@@ -4,6 +4,52 @@ const XTRACKER_BASE = "https://xtracker.polymarket.com";
 const DATA_API_BASE = "https://data-api.polymarket.com";
 const CACHE_TTL_MS = 30000;
 
+// Kulon Supabase projekt (polymarket-elon-tracker), csak ehhez az eszkozhoz.
+// A kulcs publikus/publishable - olvasasra barki hasznalhatja, iras csak a
+// update_alert_config() fuggvenyen keresztul mukodik, PIN-nel vedve (lasd a
+// migraciot). Nincs benne penzugyi/szemelyes adat.
+const SUPABASE_URL = "https://azfslxatgwjlrtylzhwd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_-MaAb64-e7kfH_vxhSGwwA_zVJLHsjL";
+
+async function fetchSharedConfig() {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/alert_config?select=*`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  const rows = await resp.json();
+  return rows[0] || null;
+}
+
+async function saveSharedConfig(pin, config) {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/update_alert_config`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      p_pin: pin,
+      p_target_profit: config.targetProfit,
+      p_max_hours: config.maxHours,
+      p_min_legs: config.minLegs,
+      p_max_legs: config.maxLegs,
+      p_min_return_pct: config.minReturnPct,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  return resp.json(); // true / false
+}
+
+async function fetchSentAlertComboKeys() {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/sent_alerts?select=combo_key`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!resp.ok) return new Set();
+  const rows = await resp.json();
+  return new Set(rows.map((r) => r.combo_key));
+}
+
 // Csak a publikus Polygon wallet-cim kell - ez lanc-adat, barki lekerdezheti
 // barkinek a cimehez, nem titkos. Nincs sukseg API-kulcsra/private key-re
 // olvasashoz, es a site soha nem is fog ilyet kerni.
