@@ -5,6 +5,7 @@ const eventId = params.get("id");
 
 let chartInstance = null;
 const selectedBuckets = new Set();
+const MAX_CALC_BUCKETS = 20;
 
 function fmtPct(p) {
   return (p * 100).toFixed(1) + "%";
@@ -111,9 +112,9 @@ function renderBuckets(buckets) {
       const token = e.target.dataset.token;
       const price = e.target.dataset.price;
       if (e.target.checked) {
-        if (selectedBuckets.size >= 4) {
+        if (selectedBuckets.size >= MAX_CALC_BUCKETS) {
           e.target.checked = false;
-          alert("Legfeljebb 4 sávot választhatsz ki a kalkulátorhoz.");
+          alert(`Legfeljebb ${MAX_CALC_BUCKETS} sávot választhatsz ki a kalkulátorhoz.`);
           return;
         }
         selectedBuckets.add(token);
@@ -129,11 +130,11 @@ function renderBuckets(buckets) {
 
 function sendSelectedToCalculator() {
   const checks = [...document.querySelectorAll(".bucket-check:checked")];
-  if (!checks.length) {
-    alert("Jelölj be legalább egy sávot.");
+  if (checks.length < 2) {
+    alert("Jelölj be legalább 2 sávot (a kalkulátor legalább 2 sávval tud számolni).");
     return;
   }
-  const prices = checks.slice(0, 4).map((c) => c.dataset.price);
+  const prices = checks.map((c) => c.dataset.price);
   localStorage.setItem("calc_prefill", JSON.stringify(prices));
   window.location.href = "calculator.html";
 }

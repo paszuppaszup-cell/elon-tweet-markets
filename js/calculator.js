@@ -1,26 +1,62 @@
-const inputs = {
-  p1: document.getElementById("p1"),
-  p2: document.getElementById("p2"),
-  p3: document.getElementById("p3"),
-  p4: document.getElementById("p4"),
-  profit: document.getElementById("profit"),
-};
+const rowsEl = document.getElementById("priceRows");
+const profitInput = document.getElementById("profit");
 const errorBox = document.getElementById("errorBox");
 const resultsEl = document.getElementById("results");
+const MIN_ROWS = 2;
+const MAX_ROWS = 20;
+
+let rowCounter = 0;
 
 function fmtUsd(n) {
   return "$" + n.toLocaleString("hu-HU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renumberRows() {
+  [...rowsEl.querySelectorAll(".price-field")].forEach((field, i) => {
+    field.querySelector("label").textContent = `${i + 1}. sáv ára (cent)`;
+  });
+  const removeBtns = rowsEl.querySelectorAll(".remove-row-btn");
+  removeBtns.forEach((btn) => {
+    btn.disabled = removeBtns.length <= MIN_ROWS;
+  });
+}
+
+function addRow(value) {
+  if (rowsEl.querySelectorAll(".price-field").length >= MAX_ROWS) return;
+  rowCounter += 1;
+  const id = `row-${rowCounter}`;
+  const field = document.createElement("div");
+  field.className = "field price-field";
+  field.innerHTML = `
+    <label>sáv ára (cent)</label>
+    <div class="row-inline">
+      <input type="number" class="price-input" min="0" max="99.99" step="0.1" placeholder="pl. 15" value="${value ?? ""}">
+      <button type="button" class="remove-row-btn" title="Sáv eltávolítása">×</button>
+    </div>
+  `;
+  field.querySelector(".remove-row-btn").addEventListener("click", () => {
+    if (rowsEl.querySelectorAll(".price-field").length <= MIN_ROWS) return;
+    field.remove();
+    renumberRows();
+  });
+  rowsEl.appendChild(field);
+  renumberRows();
 }
 
 function calculate() {
   errorBox.innerHTML = "";
   resultsEl.innerHTML = "";
 
-  const cents = [inputs.p1, inputs.p2, inputs.p3, inputs.p4].map((el) => parseFloat(el.value));
-  const profit = parseFloat(inputs.profit.value);
+  const priceInputs = [...rowsEl.querySelectorAll(".price-input")];
+  const cents = priceInputs.map((el) => parseFloat(el.value));
+  const profit = parseFloat(profitInput.value);
 
+  if (cents.length < MIN_ROWS) {
+    errorBox.innerHTML = `<div class="error-box">Legalább ${MIN_ROWS} sávot adj meg.</div>`;
+    return;
+  }
   if (cents.some((c) => isNaN(c) || c <= 0 || c >= 100)) {
-    errorBox.innerHTML = '<div class="error-box">Mind a 4 sáv árát add meg, 0 és 100 cent között.</div>';
+    errorBox.innerHTML = '<div class="error-box">Minden sáv árát add meg, 0 és 100 cent között.</div>';
     return;
   }
   if (isNaN(profit) || profit <= 0) {
@@ -32,10 +68,10 @@ function calculate() {
   const sumProb = prices.reduce((a, b) => a + b, 0);
 
   if (sumProb >= 1) {
-    errorBox.innerHTML = `<div class="error-box">A 4 sáv árának összege ${(sumProb * 100).toFixed(1)} cent,
-      vagyis eléri/meghaladja a 100 centet — ezzel a 4 sávval nincs garantált nyereség,
+    errorBox.innerHTML = `<div class="error-box">A megadott sávok árának összege ${(sumProb * 100).toFixed(1)} cent,
+      vagyis eléri/meghaladja a 100 centet — ezekkel a sávokkal nincs garantált nyereség,
       bármekkora összeget is teszel be (a matek szerint mindig mínuszban maradnál, ha
-      csak ezt a 4 sávot tartod). Válassz olcsóbb/kevésbé valószínű sávokat.</div>`;
+      csak ezeket a sávokat tartod). Válassz kevesebb vagy olcsóbb/kevésbé valószínű sávokat.</div>`;
     return;
   }
 
@@ -67,7 +103,7 @@ function calculate() {
         <div class="value" style="color:var(--green);">${fmtUsd(profit)}</div>
       </div>
       <div class="result-card">
-        <div class="label">Max veszteség, ha egy 5. (nem választott) sáv jön be</div>
+        <div class="label">Max veszteség, ha egy nem választott sáv jön be</div>
         <div class="value" style="color:var(--red);">${fmtUsd(totalStake)}</div>
       </div>
     </div>
@@ -85,13 +121,21 @@ function prefillFromMarket() {
   localStorage.removeItem("calc_prefill");
   try {
     const values = JSON.parse(raw);
-    [inputs.p1, inputs.p2, inputs.p3, inputs.p4].forEach((el, i) => {
-      if (values[i] !== undefined) el.value = values[i];
-    });
+    if (Array.isArray(values) && values.length) {
+      rowsEl.innerHTML = "";
+      values.forEach((v) => addRow(v));
+      return true;
+    }
   } catch (e) {
     /* ignore malformed prefill data */
   }
+  return false;
 }
 
+document.getElementById("addRowBtn").addEventListener("click", () => addRow());
 document.getElementById("calcBtn").addEventListener("click", calculate);
-prefillFromMarket();
+
+if (!prefillFromMarket()) {
+  addRow();
+  addRow();
+}

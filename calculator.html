@@ -16,31 +16,18 @@
 </header>
 <main>
   <div class="panel">
-    <h3 style="margin-top:0;">Egyenlő nyereség kalkulátor (4 sáv)</h3>
+    <h3 style="margin-top:0;">Egyenlő nyereség kalkulátor</h3>
     <p class="muted" style="font-size:14px;">
-      Add meg 4 sáv árát centben (pl. 15 = 15 cent = 0,15$), és azt a nyereséget,
-      amit el szeretnél érni, ha <b>bármelyik</b> a négy közül bejön. A kalkulátor
-      kiszámolja, mennyit rakj az egyes sávokba, hogy pontosan ennyi legyen a
-      nyereséged, függetlenül attól, melyik nyer.
+      Add meg annyi sáv árát centben (pl. 15 = 15 cent = 0,15$), ahányat szeretnél,
+      és azt a nyereséget, amit el szeretnél érni, ha <b>bármelyik</b> a kiválasztottak
+      közül bejön. A kalkulátor kiszámolja, mennyit rakj az egyes sávokba, hogy
+      pontosan ennyi legyen a nyereséged, függetlenül attól, melyik nyer.
     </p>
 
-    <div class="calc-grid">
-      <div class="field">
-        <label>1. sáv ára (cent)</label>
-        <input type="number" id="p1" min="0" max="99.99" step="0.1" placeholder="pl. 15">
-      </div>
-      <div class="field">
-        <label>2. sáv ára (cent)</label>
-        <input type="number" id="p2" min="0" max="99.99" step="0.1" placeholder="pl. 20">
-      </div>
-      <div class="field">
-        <label>3. sáv ára (cent)</label>
-        <input type="number" id="p3" min="0" max="99.99" step="0.1" placeholder="pl. 10">
-      </div>
-      <div class="field">
-        <label>4. sáv ára (cent)</label>
-        <input type="number" id="p4" min="0" max="99.99" step="0.1" placeholder="pl. 5">
-      </div>
+    <div class="calc-grid" id="priceRows"></div>
+    <button id="addRowBtn" type="button">+ Sáv hozzáadása</button>
+
+    <div class="calc-grid" style="margin-top:16px;">
       <div class="field">
         <label>Elérni kívánt nyereség ($)</label>
         <input type="number" id="profit" min="0" step="1" placeholder="pl. 50">
@@ -56,12 +43,13 @@
   <div class="panel">
     <h3 style="margin-top:0;">Hogyan működik?</h3>
     <p class="muted" style="font-size:14px;">
-      Ha a 4 sáv ára összesen kevesebb, mint 100 cent, akkor van tér garantált
-      nyereségre: minden sávból ugyanannyi <i>részvényt</i> (share-t) veszel,
-      csak a befektetett összeg lesz eltérő sávanként (mert a sávok ára eltérő).
-      Ha bármelyik a négy közül bejön, ugyanannyi részvényed van belőle, tehát
-      ugyanannyi lesz a nyereséged — függetlenül attól, melyik nyer. Ha egy
-      olyan sáv jön be, amit nem választottál ki, az egész befektetést elveszíted.
+      Ha a kiválasztott sávok ára összesen kevesebb, mint 100 cent, akkor van tér
+      garantált nyereségre: minden sávból ugyanannyi <i>részvényt</i> (share-t)
+      veszel, csak a befektetett összeg lesz eltérő sávanként (mert a sávok ára
+      eltérő). Ha bármelyik a kiválasztottak közül bejön, ugyanannyi részvényed
+      van belőle, tehát ugyanannyi lesz a nyereséged — függetlenül attól, melyik
+      nyer. Ha egy olyan sáv jön be, amit nem választottál ki, az egész
+      befektetést elveszíted.
     </p>
   </div>
 </main>

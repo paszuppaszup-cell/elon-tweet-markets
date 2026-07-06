@@ -214,6 +214,18 @@ tr.live-match td:first-child::before {
 
 .field input:focus { outline: none; border-color: var(--accent); }
 
+.price-field .row-inline { display: flex; gap: 6px; }
+.price-field .row-inline input { flex: 1; }
+
+.remove-row-btn {
+  padding: 0 12px;
+  color: var(--red);
+  border-color: var(--panel-border);
+}
+
+.remove-row-btn:hover { border-color: var(--red); }
+.remove-row-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
 .result-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
