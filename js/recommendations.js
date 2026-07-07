@@ -337,39 +337,53 @@ async function computeEventLiveState(event, posts, trackings) {
   return { count, daysRemaining };
 }
 
-function renderPaceScenarioCard(event, liveState, buckets, segments) {
-  if (liveState.daysRemaining <= 0) {
-    return `
-      <div class="card" style="cursor:default;">
-        <div class="card-head"><h3><a href="market.html?id=${event.id}" style="color:inherit;">${event.title}</a></h3></div>
-        <p class="muted">Ez az időszak már lezárult.</p>
-      </div>`;
-  }
+// Egyenlo-reszveny elosztas (ugyanaz a matek, mint a kalkulatorban/legjobb
+// ajanlatban) - adott sav-halmazra, adott befektetheto osszegre.
+function computeStakeDistribution(buckets, accountValue) {
+  const sumPrice = buckets.reduce((a, b) => a + b.price, 0);
+  if (sumPrice <= 0 || sumPrice >= 1) return null;
+  const shares = accountValue / sumPrice;
+  const profit = shares - accountValue;
+  return {
+    sumPrice,
+    shares,
+    profit,
+    stakes: buckets.map((b) => ({ ...b, stake: shares * b.price })),
+  };
+}
 
-  const rangedBuckets = buckets
-    .map((b) => ({ ...b, range: parseBucketRange(b.label) }))
-    .filter((b) => b.range);
-
-  const rows = segments
-    .map((seg) => {
-      const projLo = liveState.count + seg.lo * liveState.daysRemaining;
-      const projHi = liveState.count + seg.hi * liveState.daysRemaining;
-      const matches = rangedBuckets
-        .filter((b) => b.range.max >= projLo && b.range.min <= projHi)
-        .sort((a, b) => a.range.min - b.range.min);
-
-      const matchText = matches.length
-        ? matches.map((b) => `${b.label} (${(b.price * 100).toFixed(1)}c)`).join(", ")
-        : "nincs egyező sáv";
-
-      return `
-        <tr>
-          <td>${seg.label} tweet/nap</td>
-          <td class="muted">${Math.round(projLo)}–${Math.round(projHi)} tweet összesen</td>
-          <td>${matchText}</td>
-        </tr>`;
-    })
+function renderPaceEntry(entry) {
+  const { event, liveState, seg, dist, matches } = entry;
+  const rows = (dist ? dist.stakes : matches)
+    .map(
+      (b) => `
+      <tr>
+        <td>${b.label}</td>
+        <td>${(b.price * 100).toFixed(1)}c</td>
+        <td>${dist ? fmtUsd(b.stake) : "–"}</td>
+      </tr>`
+    )
     .join("");
+
+  const profitPerDay = dist ? dist.profit / liveState.daysRemaining : null;
+
+  const profitBlock = dist
+    ? `
+      <div class="result-grid" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+        <div class="result-card">
+          <div class="label">Profit, ha bejön</div>
+          <div class="value" style="color:var(--green);">${fmtUsd(dist.profit)}</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Nap (a piac zárásáig)</div>
+          <div class="value">${liveState.daysRemaining.toFixed(1)}</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Profit/nap</div>
+          <div class="value" style="color:var(--accent);">${fmtUsd(profitPerDay)}</div>
+        </div>
+      </div>`
+    : '<p class="muted" style="margin-top:10px;">Linkeld a wallet-címed a "Legjobb ajánlat" panelnél a profit-számításhoz.</p>';
 
   return `
     <div class="card" style="cursor:default;">
@@ -377,11 +391,14 @@ function renderPaceScenarioCard(event, liveState, buckets, segments) {
         <h3><a href="market.html?id=${event.id}" style="color:inherit;">${event.title}</a></h3>
         <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
       </div>
-      <p class="muted" style="font-size:13px;">Eddigi tweet-szám ebben az időszakban: <b>${liveState.count}</b></p>
+      <p class="muted" style="font-size:13px;">
+        Jelenleg <b>${liveState.count}</b> tweetnél tart · Szcenárió: napi <b>${seg.label}</b> tweet
+      </p>
       <table style="margin-top:10px;">
-        <thead><tr><th>Napi tempó</th><th>Várható össz. tweet</th><th>Ez alapján a sáv(ok)</th></tr></thead>
+        <thead><tr><th>Sáv</th><th>Ár</th><th>Tét</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${profitBlock}
     </div>
   `;
 }
@@ -395,25 +412,51 @@ async function refreshPaceScenarios() {
     return;
   }
 
+  const address = getStoredWalletAddress();
   listEl.innerHTML = '<p class="loading">Betöltés...</p>';
   try {
-    const [events, posts, trackings] = await Promise.all([
+    const [events, posts, trackings, accountValue] = await Promise.all([
       searchElonTweetEvents(),
       fetchElonPosts(),
       fetchElonTrackings(),
+      address ? fetchPortfolioValue(address) : Promise.resolve(null),
     ]);
 
-    const cards = [];
+    const entries = [];
     for (const event of events) {
       const liveState = await computeEventLiveState(event, posts, trackings);
-      if (!liveState) continue;
-      const buckets = loadBucketsFromEvent(event);
-      cards.push(renderPaceScenarioCard(event, liveState, buckets, segments));
+      if (!liveState || liveState.daysRemaining <= 0) continue;
+
+      const buckets = loadBucketsFromEvent(event)
+        .map((b) => ({ ...b, range: parseBucketRange(b.label) }))
+        .filter((b) => b.range);
+
+      for (const seg of segments) {
+        const projLo = liveState.count + seg.lo * liveState.daysRemaining;
+        const projHi = liveState.count + seg.hi * liveState.daysRemaining;
+        const matches = buckets
+          .filter((b) => b.range.max >= projLo && b.range.min <= projHi)
+          .sort((a, b) => a.range.min - b.range.min);
+        if (!matches.length) continue;
+
+        const dist = accountValue ? computeStakeDistribution(matches, accountValue) : null;
+        entries.push({ event, liveState, seg, matches, dist });
+      }
     }
 
-    listEl.innerHTML = cards.length
-      ? cards.join("")
-      : '<p class="muted">Egyik aktív piachoz sem található élő tweet-számláló.</p>';
+    entries.sort((a, b) => {
+      const pa = a.dist ? a.dist.profit / a.liveState.daysRemaining : -Infinity;
+      const pb = b.dist ? b.dist.profit / b.liveState.daysRemaining : -Infinity;
+      return pb - pa;
+    });
+
+    const notice = !address
+      ? '<p class="muted" style="margin-bottom:10px;">Linkeld a wallet-címed fent (a "Legjobb ajánlat" panelnél) a profit/nap szerinti rangsorhoz.</p>'
+      : "";
+
+    listEl.innerHTML = entries.length
+      ? notice + entries.map(renderPaceEntry).join("")
+      : '<p class="muted">Egyik aktív piacon sem találtam egyező sávot a kiválasztott tempó-sávokkal.</p>';
   } catch (e) {
     listEl.innerHTML = `<div class="error-box">Hiba: ${e.message}</div>`;
   }
