@@ -334,7 +334,9 @@ async function computeEventLiveState(event, posts, trackings) {
 
   const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
   const daysRemaining = (new Date(window_.endDate).getTime() - Date.now()) / 86400000;
-  return { count, daysRemaining };
+  const daysElapsed = (Date.now() - new Date(window_.startDate).getTime()) / 86400000;
+  const currentPace = daysElapsed > 0 ? count / daysElapsed : null;
+  return { count, daysRemaining, daysElapsed, currentPace };
 }
 
 // Egyenlo-reszveny elosztas (ugyanaz a matek, mint a kalkulatorban/legjobb
@@ -397,7 +399,9 @@ function renderPaceEntry(entry) {
         <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
       </div>
       <p class="muted" style="font-size:13px;">
-        Jelenleg <b>${liveState.count}</b> tweetnél tart · Szcenáriók: napi <b>${segmentLabels.join(", ")}</b> tweet
+        Jelenleg <b>${liveState.count}</b> tweetnél tart · eddigi átlag:
+        <b>${liveState.currentPace !== null ? liveState.currentPace.toFixed(1) + " tweet/nap" : "n/a (most kezdődött)"}</b> ·
+        Szcenáriók: napi <b>${segmentLabels.join(", ")}</b> tweet
       </p>
       <table style="margin-top:10px;">
         <thead><tr><th>Sáv</th><th>Ár</th><th>Tét</th></tr></thead>
