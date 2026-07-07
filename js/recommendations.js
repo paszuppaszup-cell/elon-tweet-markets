@@ -399,7 +399,8 @@ function renderPaceEntry(entry) {
         <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
       </div>
       <p class="muted" style="font-size:13px;">
-        Jelenleg <b>${liveState.count}</b> tweetnél tart · eddigi átlag:
+        Jelenleg <b>${liveState.count}</b> tweetnél tart, <b>${liveState.daysElapsed.toFixed(2)} nap</b> telt el eddig ·
+        eddigi átlag:
         <b>${liveState.currentPace !== null ? liveState.currentPace.toFixed(1) + " tweet/nap" : "n/a (most kezdődött)"}</b> ·
         Szcenáriók: napi <b>${segmentLabels.join(", ")}</b> tweet
       </p>
