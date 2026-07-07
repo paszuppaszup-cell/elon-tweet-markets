@@ -42,6 +42,18 @@
   </div>
 
   <div class="panel">
+    <h3 style="margin-top:0;">Napi tweet-tempó szcenáriók (minden piac)</h3>
+    <p class="muted" style="font-size:13px;">
+      Válaszd ki, szerinted átlagosan napi hány tweetet fog írni Elon Musk a
+      hátralévő időben (akár többet is egyszerre) — minden aktív piacnál
+      (heti és havi is) megmutatja, hogy ez alapján melyik sáv(ok)ba futna be,
+      a jelenlegi árukkal együtt.
+    </p>
+    <div id="paceSegments" class="bucket-preview" style="margin-bottom:12px;"></div>
+    <div id="paceScenarioList"></div>
+  </div>
+
+  <div class="panel">
     <h3 style="margin-top:0;">Beállítások</h3>
     <p class="muted" style="font-size:13px;">
       Ugyanaz a logika, mint a Telegram-bot (<code>alerts.py</code>) használ: minden
@@ -91,6 +103,6 @@
 </main>
 <footer>Adatok: Polymarket Gamma API (nyilvános, élő). Nem befektetési tanács.</footer>
 <script src="js/api.js?v=5"></script>
-<script src="js/recommendations.js?v=4"></script>
+<script src="js/recommendations.js?v=5"></script>
 </body>
 </html>

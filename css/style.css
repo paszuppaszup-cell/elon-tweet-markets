@@ -132,6 +132,22 @@ button:hover { border-color: var(--accent); }
 
 .chip b { color: var(--green); }
 
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip-toggle input { accent-color: var(--accent); }
+
+.chip-toggle.checked {
+  border-color: var(--accent);
+  background: rgba(79,140,255,0.12);
+  color: var(--accent);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

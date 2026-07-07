@@ -1,6 +1,12 @@
 const REFRESH_MS = 60000;
 const BEST_PICK_REFRESH_MS = 600000; // 10 perc
 const WALLET_STORAGE_KEY = "polymarket_wallet_address"; // ugyanaz, mint account.js
+const PACE_SEGMENTS_KEY = "pace_scenario_segments";
+const PACE_SEGMENTS = Array.from({ length: 8 }, (_, i) => ({
+  lo: i * 5,
+  hi: i * 5 + 5,
+  label: `${i * 5}-${i * 5 + 5}`,
+}));
 const DEFAULT_CONFIG = {
   targetProfit: 20,
   maxHours: 48,
@@ -279,6 +285,140 @@ async function refreshBestPick() {
   }
 }
 
+// --- Napi tweet-tempo szcenariok (minden aktiv piacra) ---
+
+function loadSelectedPaceSegments() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PACE_SEGMENTS_KEY) || "[]");
+    return new Set(raw);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function saveSelectedPaceSegments(set) {
+  localStorage.setItem(PACE_SEGMENTS_KEY, JSON.stringify([...set]));
+}
+
+let selectedPaceSegments = loadSelectedPaceSegments();
+
+function renderPaceSegmentChips() {
+  const container = document.getElementById("paceSegments");
+  container.innerHTML = PACE_SEGMENTS.map(
+    (seg) => `
+    <label class="chip chip-toggle ${selectedPaceSegments.has(seg.label) ? "checked" : ""}" data-segment="${seg.label}">
+      <input type="checkbox" ${selectedPaceSegments.has(seg.label) ? "checked" : ""}>
+      ${seg.label} tweet/nap
+    </label>`
+  ).join("");
+
+  container.querySelectorAll(".chip-toggle").forEach((chip) => {
+    chip.querySelector("input").addEventListener("change", (e) => {
+      const segLabel = chip.dataset.segment;
+      if (e.target.checked) {
+        selectedPaceSegments.add(segLabel);
+      } else {
+        selectedPaceSegments.delete(segLabel);
+      }
+      chip.classList.toggle("checked", e.target.checked);
+      saveSelectedPaceSegments(selectedPaceSegments);
+      refreshPaceScenarios();
+    });
+  });
+}
+
+async function computeEventLiveState(event, posts, trackings) {
+  let window_ = findTrackingWindow(trackings, event.title);
+  if (!window_) window_ = parseMonthlyWindowFromTitle(event.title);
+  if (!window_) return null;
+
+  const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
+  const daysRemaining = (new Date(window_.endDate).getTime() - Date.now()) / 86400000;
+  return { count, daysRemaining };
+}
+
+function renderPaceScenarioCard(event, liveState, buckets, segments) {
+  if (liveState.daysRemaining <= 0) {
+    return `
+      <div class="card" style="cursor:default;">
+        <div class="card-head"><h3><a href="market.html?id=${event.id}" style="color:inherit;">${event.title}</a></h3></div>
+        <p class="muted">Ez az időszak már lezárult.</p>
+      </div>`;
+  }
+
+  const rangedBuckets = buckets
+    .map((b) => ({ ...b, range: parseBucketRange(b.label) }))
+    .filter((b) => b.range);
+
+  const rows = segments
+    .map((seg) => {
+      const projLo = liveState.count + seg.lo * liveState.daysRemaining;
+      const projHi = liveState.count + seg.hi * liveState.daysRemaining;
+      const matches = rangedBuckets
+        .filter((b) => b.range.max >= projLo && b.range.min <= projHi)
+        .sort((a, b) => a.range.min - b.range.min);
+
+      const matchText = matches.length
+        ? matches.map((b) => `${b.label} (${(b.price * 100).toFixed(1)}c)`).join(", ")
+        : "nincs egyező sáv";
+
+      return `
+        <tr>
+          <td>${seg.label} tweet/nap</td>
+          <td class="muted">${Math.round(projLo)}–${Math.round(projHi)} tweet összesen</td>
+          <td>${matchText}</td>
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <div class="card" style="cursor:default;">
+      <div class="card-head">
+        <h3><a href="market.html?id=${event.id}" style="color:inherit;">${event.title}</a></h3>
+        <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
+      </div>
+      <p class="muted" style="font-size:13px;">Eddigi tweet-szám ebben az időszakban: <b>${liveState.count}</b></p>
+      <table style="margin-top:10px;">
+        <thead><tr><th>Napi tempó</th><th>Várható össz. tweet</th><th>Ez alapján a sáv(ok)</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function refreshPaceScenarios() {
+  const listEl = document.getElementById("paceScenarioList");
+  const segments = PACE_SEGMENTS.filter((seg) => selectedPaceSegments.has(seg.label));
+
+  if (!segments.length) {
+    listEl.innerHTML = '<p class="muted">Válassz ki legalább egy napi tempó-sávot fent.</p>';
+    return;
+  }
+
+  listEl.innerHTML = '<p class="loading">Betöltés...</p>';
+  try {
+    const [events, posts, trackings] = await Promise.all([
+      searchElonTweetEvents(),
+      fetchElonPosts(),
+      fetchElonTrackings(),
+    ]);
+
+    const cards = [];
+    for (const event of events) {
+      const liveState = await computeEventLiveState(event, posts, trackings);
+      if (!liveState) continue;
+      const buckets = loadBucketsFromEvent(event);
+      cards.push(renderPaceScenarioCard(event, liveState, buckets, segments));
+    }
+
+    listEl.innerHTML = cards.length
+      ? cards.join("")
+      : '<p class="muted">Egyik aktív piachoz sem található élő tweet-számláló.</p>';
+  } catch (e) {
+    listEl.innerHTML = `<div class="error-box">Hiba: ${e.message}</div>`;
+  }
+}
+
 async function refresh() {
   statusEl.textContent = "Frissítés...";
   try {
@@ -358,6 +498,10 @@ if (storedWalletAddress) {
   document.getElementById("bestAddressInput").value = storedWalletAddress;
 }
 
+renderPaceSegmentChips();
+refreshPaceScenarios();
+
 loadSharedConfigAndRender();
 setInterval(refresh, REFRESH_MS);
 setInterval(refreshBestPick, BEST_PICK_REFRESH_MS);
+setInterval(refreshPaceScenarios, BEST_PICK_REFRESH_MS);
