@@ -137,6 +137,21 @@ function countPostsInWindow(posts, startIso, endIso) {
   }, 0);
 }
 
+// Osszevonja a fenti xtracker segedeket egyetlen "hol tart most ez az
+// esemeny" allapotba - a market.html, index.html es recommendations.html
+// is ezt hasznalja.
+function computeEventLiveState(event, posts, trackings) {
+  let window_ = findTrackingWindow(trackings, event.title);
+  if (!window_) window_ = parseMonthlyWindowFromTitle(event.title);
+  if (!window_) return null;
+
+  const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
+  const daysRemaining = (new Date(window_.endDate).getTime() - Date.now()) / 86400000;
+  const daysElapsed = (Date.now() - new Date(window_.startDate).getTime()) / 86400000;
+  const currentPace = daysElapsed > 0 ? count / daysElapsed : null;
+  return { count, daysRemaining, daysElapsed, currentPace };
+}
+
 function cacheGet(key) {
   try {
     const raw = sessionStorage.getItem(key);

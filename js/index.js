@@ -7,7 +7,7 @@ function fmtPct(p) {
   return (p * 100).toFixed(1) + "%";
 }
 
-function renderEvents(events) {
+function renderEvents(events, liveStates) {
   if (!events.length) {
     listEl.innerHTML = '<p class="muted">Nincs jelenleg aktív Elon Musk tweet-szám piac.</p>';
     return;
@@ -33,6 +33,11 @@ function renderEvents(events) {
         })
         .join("");
 
+      const liveState = liveStates.get(ev.id);
+      const liveLine = liveState
+        ? `Jelenleg <b>${liveState.count}</b> tweetnél tart · <b>${liveState.daysRemaining > 0 ? liveState.daysRemaining.toFixed(1) : "0"} nap</b> van hátra`
+        : "";
+
       return `
         <a class="card" href="market.html?id=${ev.id}">
           <div class="card-head">
@@ -42,6 +47,7 @@ function renderEvents(events) {
           <div class="muted" style="font-size:13px;margin-top:4px;">
             Zárás: ${new Date(ev.endDate).toLocaleString("hu-HU")} · Volumen: $${Number(ev.volume || 0).toLocaleString("hu-HU", { maximumFractionDigits: 0 })}
           </div>
+          ${liveLine ? `<div class="muted" style="font-size:13px;margin-top:2px;">${liveLine}</div>` : ""}
           <div class="bucket-preview">${chips}</div>
         </a>
       `;
@@ -53,7 +59,19 @@ async function load() {
   statusEl.textContent = "Frissítés...";
   try {
     const events = await searchElonTweetEvents();
-    renderEvents(events);
+
+    let liveStates = new Map();
+    try {
+      const [posts, trackings] = await Promise.all([fetchElonPosts(), fetchElonTrackings()]);
+      for (const ev of events) {
+        const state = computeEventLiveState(ev, posts, trackings);
+        if (state) liveStates.set(ev.id, state);
+      }
+    } catch (e) {
+      /* elo tweet-szam nem elerheto - a lista attol meg megjelenik */
+    }
+
+    renderEvents(events, liveStates);
     statusEl.textContent = "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
   } catch (e) {
     statusEl.textContent = "Hiba az adatok betöltésekor: " + e.message;

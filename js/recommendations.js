@@ -327,18 +327,6 @@ function renderPaceSegmentChips() {
   });
 }
 
-async function computeEventLiveState(event, posts, trackings) {
-  let window_ = findTrackingWindow(trackings, event.title);
-  if (!window_) window_ = parseMonthlyWindowFromTitle(event.title);
-  if (!window_) return null;
-
-  const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
-  const daysRemaining = (new Date(window_.endDate).getTime() - Date.now()) / 86400000;
-  const daysElapsed = (Date.now() - new Date(window_.startDate).getTime()) / 86400000;
-  const currentPace = daysElapsed > 0 ? count / daysElapsed : null;
-  return { count, daysRemaining, daysElapsed, currentPace };
-}
-
 // Egyenlo-reszveny elosztas (ugyanaz a matek, mint a kalkulatorban/legjobb
 // ajanlatban) - adott sav-halmazra, adott befektetheto osszegre.
 function computeStakeDistribution(buckets, accountValue) {
