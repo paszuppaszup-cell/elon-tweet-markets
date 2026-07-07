@@ -53,7 +53,8 @@ function renderPaceInfo(priceInputs) {
   const daysRemaining = (new Date(eventContext.windowEnd).getTime() - Date.now()) / 86400000;
   const rowsWithLabels = priceInputs
     .map((el) => ({ label: el.dataset.label, range: parseBucketRange(el.dataset.label) }))
-    .filter((r) => r.range);
+    .filter((r) => r.range)
+    .sort((a, b) => a.range.min - b.range.min);
 
   if (!rowsWithLabels.length) return;
 
