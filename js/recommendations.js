@@ -353,7 +353,7 @@ function computeStakeDistribution(buckets, accountValue) {
 }
 
 function renderPaceEntry(entry) {
-  const { event, liveState, seg, dist, matches } = entry;
+  const { event, liveState, segmentLabels, dist, matches, sumPrice } = entry;
   const rows = (dist ? dist.stakes : matches)
     .map(
       (b) => `
@@ -367,11 +367,16 @@ function renderPaceEntry(entry) {
 
   const profitPerDay = dist ? dist.profit / liveState.daysRemaining : null;
 
-  const profitBlock = dist
-    ? `
+  let profitBlock;
+  if (!dist && sumPrice >= 1) {
+    profitBlock = `<p class="muted" style="margin-top:10px;">Ez a ${matches.length} sáv együtt már ${(sumPrice * 100).toFixed(1)} centet ér — nincs garantált profit ennyi sávval egyszerre.</p>`;
+  } else if (!dist) {
+    profitBlock = '<p class="muted" style="margin-top:10px;">Linkeld a wallet-címed a "Legjobb ajánlat" panelnél a profit-számításhoz.</p>';
+  } else {
+    profitBlock = `
       <div class="result-grid" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
         <div class="result-card">
-          <div class="label">Profit, ha bejön</div>
+          <div class="label">Profit, ha bármelyik bejön</div>
           <div class="value" style="color:var(--green);">${fmtUsd(dist.profit)}</div>
         </div>
         <div class="result-card">
@@ -382,8 +387,8 @@ function renderPaceEntry(entry) {
           <div class="label">Profit/nap</div>
           <div class="value" style="color:var(--accent);">${fmtUsd(profitPerDay)}</div>
         </div>
-      </div>`
-    : '<p class="muted" style="margin-top:10px;">Linkeld a wallet-címed a "Legjobb ajánlat" panelnél a profit-számításhoz.</p>';
+      </div>`;
+  }
 
   return `
     <div class="card" style="cursor:default;">
@@ -392,7 +397,7 @@ function renderPaceEntry(entry) {
         <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
       </div>
       <p class="muted" style="font-size:13px;">
-        Jelenleg <b>${liveState.count}</b> tweetnél tart · Szcenárió: napi <b>${seg.label}</b> tweet
+        Jelenleg <b>${liveState.count}</b> tweetnél tart · Szcenáriók: napi <b>${segmentLabels.join(", ")}</b> tweet
       </p>
       <table style="margin-top:10px;">
         <thead><tr><th>Sáv</th><th>Ár</th><th>Tét</th></tr></thead>
@@ -431,17 +436,26 @@ async function refreshPaceScenarios() {
         .map((b) => ({ ...b, range: parseBucketRange(b.label) }))
         .filter((b) => b.range);
 
+      // Az osszes kijelolt szegmens altal erintett savot EGYUTT kezeljuk -
+      // egy kombinalt tetkent (mint a kalkulatorban), nem kulon-kulon a
+      // teljes egyenleggel szegmensenkent (az fizikailag ertelmetlen lenne,
+      // hiszen ugyanazt a penzt tobbszor nem lehet betenni).
+      const matchedMap = new Map();
+      const matchedSegmentLabels = [];
       for (const seg of segments) {
         const projLo = liveState.count + seg.lo * liveState.daysRemaining;
         const projHi = liveState.count + seg.hi * liveState.daysRemaining;
-        const matches = buckets
-          .filter((b) => b.range.max >= projLo && b.range.min <= projHi)
-          .sort((a, b) => a.range.min - b.range.min);
-        if (!matches.length) continue;
-
-        const dist = accountValue ? computeStakeDistribution(matches, accountValue) : null;
-        entries.push({ event, liveState, seg, matches, dist });
+        const segMatches = buckets.filter((b) => b.range.max >= projLo && b.range.min <= projHi);
+        if (segMatches.length) matchedSegmentLabels.push(seg.label);
+        segMatches.forEach((b) => matchedMap.set(b.tokenId, b));
       }
+      if (!matchedMap.size) continue;
+
+      const matches = [...matchedMap.values()].sort((a, b) => a.range.min - b.range.min);
+      const sumPrice = matches.reduce((a, b) => a + b.price, 0);
+      const dist = accountValue ? computeStakeDistribution(matches, accountValue) : null;
+
+      entries.push({ event, liveState, segmentLabels: matchedSegmentLabels, matches, dist, sumPrice });
     }
 
     entries.sort((a, b) => {
