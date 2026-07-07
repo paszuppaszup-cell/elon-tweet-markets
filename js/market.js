@@ -6,6 +6,7 @@ const eventId = params.get("id");
 let chartInstance = null;
 const selectedBuckets = new Set();
 const MAX_CALC_BUCKETS = 20;
+let liveTweetState = null;
 
 function fmtPct(p) {
   return (p * 100).toFixed(1) + "%";
@@ -13,21 +14,6 @@ function fmtPct(p) {
 
 function bucketLabel(b) {
   return b.groupItemTitle || b.outcomes[0] || b.question;
-}
-
-function parseBucketRange(label) {
-  const clean = (label || "").trim();
-  if (clean.endsWith("+")) {
-    return { min: parseInt(clean, 10), max: Infinity };
-  }
-  if (clean.startsWith("<")) {
-    return { min: 0, max: parseInt(clean.slice(1), 10) - 1 };
-  }
-  const parts = clean.split("-").map((n) => parseInt(n, 10));
-  if (parts.length === 2 && !parts.some(isNaN)) {
-    return { min: parts[0], max: parts[1] };
-  }
-  return null;
 }
 
 function findMatchingBucketToken(buckets, liveCount) {
@@ -97,7 +83,7 @@ function renderBuckets(buckets) {
       const checked = selectedBuckets.has(b.tokenIds[0]) ? "checked" : "";
       return `
         <tr class="${i < 3 ? "top-row" : ""}" data-row-token="${b.tokenIds[0]}">
-          <td><input type="checkbox" data-token="${b.tokenIds[0]}" data-price="${(price * 100).toFixed(2)}" class="bucket-check" ${checked}></td>
+          <td><input type="checkbox" data-token="${b.tokenIds[0]}" data-price="${(price * 100).toFixed(2)}" data-label="${bucketLabel(b)}" class="bucket-check" ${checked}></td>
           <td>${bucketLabel(b)}</td>
           <td>${fmtPct(price)} (${(price * 100).toFixed(1)}c)</td>
           <td style="width:120px;"><div class="bar-track"><div class="bar-fill" style="width:${Math.min(price * 100, 100)}%"></div></div></td>
@@ -134,8 +120,13 @@ function sendSelectedToCalculator() {
     alert("Jelölj be legalább 2 sávot (a kalkulátor legalább 2 sávval tud számolni).");
     return;
   }
-  const prices = checks.map((c) => c.dataset.price);
-  localStorage.setItem("calc_prefill", JSON.stringify(prices));
+  const buckets = checks.map((c) => ({ price: c.dataset.price, label: c.dataset.label }));
+  const payload = {
+    buckets,
+    liveCount: liveTweetState ? liveTweetState.count : null,
+    windowEnd: liveTweetState ? liveTweetState.windowEnd : null,
+  };
+  localStorage.setItem("calc_prefill", JSON.stringify(payload));
   window.location.href = "calculator.html";
 }
 
@@ -153,6 +144,7 @@ async function updateLiveCount(event, buckets) {
     const posts = await fetchElonPosts();
     const count = countPostsInWindow(posts, window_.startDate, window_.endDate);
     const matchToken = findMatchingBucketToken(buckets, count);
+    liveTweetState = { count, windowEnd: window_.endDate };
 
     document.querySelectorAll("#bucketRows tr").forEach((tr) => {
       tr.classList.toggle("live-match", tr.dataset.rowToken === matchToken);

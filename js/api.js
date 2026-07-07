@@ -197,3 +197,19 @@ async function fetchPriceHistory(tokenId, interval = "1w", fidelity = 60) {
 function isWeeklyRangeEvent(event) {
   return (event.title || "").includes(" - ");
 }
+
+// "160-179" -> {min:160,max:179}; "<40" -> {min:0,max:39}; "500+" -> {min:500,max:Infinity}
+function parseBucketRange(label) {
+  const clean = (label || "").trim();
+  if (clean.endsWith("+")) {
+    return { min: parseInt(clean, 10), max: Infinity };
+  }
+  if (clean.startsWith("<")) {
+    return { min: 0, max: parseInt(clean.slice(1), 10) - 1 };
+  }
+  const parts = clean.split("-").map((n) => parseInt(n, 10));
+  if (parts.length === 2 && !parts.some(isNaN)) {
+    return { min: parts[0], max: parts[1] };
+  }
+  return null;
+}
