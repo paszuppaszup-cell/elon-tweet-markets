@@ -11,6 +11,21 @@ const CACHE_TTL_MS = 30000;
 const SUPABASE_URL = "https://azfslxatgwjlrtylzhwd.supabase.co";
 const SUPABASE_KEY = "sb_publishable_-MaAb64-e7kfH_vxhSGwwA_zVJLHsjL";
 
+// Minden kulso/ismeretlen forrasbol jovo szoveget (Polymarket piac-cimek,
+// sav-cimkek, kimenetek, hibauzenetek, URL-parameterek) EZEN kell atengedni,
+// mielott innerHTML-be kerul - kulonben egy tamado, aki letrehoz egy piacot
+// pl. "<img src=x onerror=...>" cimmel, JS-t futtathat a latogato bongeszojeben
+// (XSS). A " es ' escapelese miatt idezojeles attributumban (pl. data-label="…")
+// is biztonsagos. Szamokra (ar, darab) nem kotelezo, de artalmatlan.
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function fetchSharedConfig() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/alert_config?select=*`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -193,7 +208,7 @@ async function searchElonTweetEvents() {
 }
 
 async function fetchEventById(id) {
-  const url = `${GAMMA_BASE}/events/${id}`;
+  const url = `${GAMMA_BASE}/events/${encodeURIComponent(id)}`;
   return fetchJson(url, `event-${id}`);
 }
 
@@ -237,6 +252,181 @@ function isWeeklyRangeEvent(event) {
 }
 
 // "160-179" -> {min:160,max:179}; "<40" -> {min:0,max:39}; "500+" -> {min:500,max:Infinity}
+// --- Pozicio-ertekelo statisztikai modell (lasd polybot/stats.py +
+// polybot/strategies/position_watch.py - ugyanaz a matek mindket oldalon) ---
+// A tweetek erkezeset Poisson-folyamatnak tekintjuk egy naponkenti rataval:
+// megbecsuljuk, mekkora esellyel esik a VEGSO tweet-szam a tartott sávba, es
+// ezt osszevetjuk a jelenlegi piaci arral (amennyiert most el lehetne adni).
+// Ha a modell-becsult nyeresi esely lenyegesen a piaci ar alatt van,
+// statisztikailag jobban jarsz, ha most zarod le a poziciot.
+const POSITION_WATCH_RECENT_WINDOW_DAYS = 3.0;
+const POSITION_WATCH_MIN_VALUE_USD = 1;
+const POSITION_WATCH_MIN_PRICE_GAP = 0.07;
+const POSITION_WATCH_MIN_EDGE_USD = 3;
+const _POISSON_EXACT_LIMIT = 30;
+
+function _erf(x) {
+  // Abramowitz-Stegun 7.1.26 kozelites, kb. 1.5e-7 max hibaval.
+  const sign = x >= 0 ? 1 : -1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429;
+  const p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+
+function normCdf(x) {
+  return 0.5 * (1 + _erf(x / Math.sqrt(2)));
+}
+
+function poissonCdf(k, lam) {
+  if (k < 0) return 0;
+  if (lam <= 0) return 1;
+  if (lam > _POISSON_EXACT_LIMIT) {
+    const z = (k + 0.5 - lam) / Math.sqrt(lam);
+    return Math.min(Math.max(normCdf(z), 0), 1);
+  }
+  let p = Math.exp(-lam);
+  let cdf = p;
+  for (let i = 1; i <= k; i++) {
+    p *= lam / i;
+    cdf += p;
+    if (cdf >= 1 - 1e-12) break;
+  }
+  return Math.min(cdf, 1);
+}
+
+function probCountInRange(currentCount, remainingMean, lo, hi) {
+  const neededLo = Math.max(0, lo - currentCount);
+  if (hi === null || hi === undefined || hi === Infinity) {
+    return 1 - poissonCdf(neededLo - 1, remainingMean);
+  }
+  const neededHi = hi - currentCount;
+  if (neededHi < 0) return 0;
+  return poissonCdf(neededHi, remainingMean) - poissonCdf(neededLo - 1, remainingMean);
+}
+
+const _BUCKET_RANGE_RE = /post\s+(\d+)\s*-\s*(\d+)\s+tweets/i;
+const _BUCKET_UNDER_RE = /post\s+<\s*(\d+)\s+tweets/i;
+const _BUCKET_PLUS_RE = /post\s+(\d+)\s*\+\s+tweets/i;
+
+// Egy pozicio 'title' mezojebol (pl. 'Will Elon Musk post 120-139 tweets
+// from June 16 to June 23, 2026?') kinyeri a sav hatarait: {lo, hi}, hi=null
+// ha nyitott felso hatar (pl. '500+'). null, ha nem felismerheto tweet-cim.
+function parseBucketFromTitle(title) {
+  title = title || "";
+  let m = title.match(_BUCKET_RANGE_RE);
+  if (m) return { lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) };
+  m = title.match(_BUCKET_UNDER_RE);
+  if (m) return { lo: 0, hi: parseInt(m[1], 10) - 1 };
+  m = title.match(_BUCKET_PLUS_RE);
+  if (m) return { lo: parseInt(m[1], 10), hi: null };
+  return null;
+}
+
+function estimateDailyRate(posts, windowStartIso, nowMs, currentCount, daysElapsed) {
+  if (daysElapsed <= 0) return 0;
+  const paceFull = currentCount / daysElapsed;
+
+  const windowStartMs = new Date(windowStartIso).getTime();
+  const recentStartMs = Math.max(windowStartMs, nowMs - POSITION_WATCH_RECENT_WINDOW_DAYS * 86400000);
+  const recentSpanDays = (nowMs - recentStartMs) / 86400000;
+  if (recentSpanDays <= 0) return paceFull;
+
+  const recentCount = countPostsInWindow(posts, new Date(recentStartMs).toISOString(), new Date(nowMs).toISOString());
+  const paceRecent = recentCount / recentSpanDays;
+  const weight = Math.min(1, recentSpanDays / POSITION_WATCH_RECENT_WINDOW_DAYS);
+  return weight * paceRecent + (1 - weight) * paceFull;
+}
+
+// Egy nyitott poziciohoz visszaadja a modell-ertekelest, vagy null-t, ha nem
+// modellezheto (nem felismerheto sav-cim, nincs xtracker/naptari ablak,
+// vagy mar nincs hatralevo ido).
+function evaluatePositionModel(position, eventTitle, posts, trackings, nowMs) {
+  const bucket = parseBucketFromTitle(position.title);
+  if (!bucket) return null;
+
+  let window_ = findTrackingWindow(trackings, eventTitle);
+  if (!window_) window_ = parseMonthlyWindowFromTitle(eventTitle);
+  if (!window_) return null;
+
+  const endMs = new Date(window_.endDate).getTime();
+  const startMs = new Date(window_.startDate).getTime();
+  const daysRemaining = (endMs - nowMs) / 86400000;
+  const daysElapsed = (nowMs - startMs) / 86400000;
+  if (daysRemaining <= 0) return null;
+
+  const currentCount = countPostsInWindow(posts, window_.startDate, window_.endDate);
+  const dailyRate = estimateDailyRate(posts, window_.startDate, nowMs, currentCount, daysElapsed);
+  const remainingMean = dailyRate * daysRemaining;
+
+  const modelPYes = probCountInRange(currentCount, remainingMean, bucket.lo, bucket.hi);
+  const outcome = (position.outcome || "Yes").trim().toLowerCase();
+  let modelP = outcome === "yes" ? modelPYes : 1 - modelPYes;
+  modelP = Math.min(Math.max(modelP, 0), 1);
+
+  const curPrice = Number(position.curPrice) || 0;
+  const size = Number(position.size) || 0;
+  const currentValue = Number(position.currentValue) || size * curPrice;
+  const expectedValueIfHold = size * modelP;
+  const edgeUsd = currentValue - expectedValueIfHold;
+
+  const signal =
+    currentValue >= POSITION_WATCH_MIN_VALUE_USD &&
+    curPrice - modelP >= POSITION_WATCH_MIN_PRICE_GAP &&
+    edgeUsd >= POSITION_WATCH_MIN_EDGE_USD;
+
+  return {
+    lo: bucket.lo,
+    hi: bucket.hi,
+    currentCount,
+    daysRemaining,
+    dailyRate,
+    modelP,
+    curPrice,
+    currentValue,
+    expectedValueIfHold,
+    edgeUsd,
+    signal,
+  };
+}
+
+// Az adott cim MINDEN nyitott poziciojanak (redeemable===false) ertekeleset
+// visszaadja egy {asset: evaluation} Map-kent - a nem-Elon vagy nem
+// ertelmezheto piacokat/pozokat csendben kihagyja.
+async function evaluateOpenPositions(positions) {
+  const candidates = positions
+    .map((p) => ({ position: p, bucket: parseBucketFromTitle(p.title) }))
+    .filter((c) => c.bucket);
+  if (!candidates.length) return new Map();
+
+  const [posts, trackings] = await Promise.all([fetchElonPosts(), fetchElonTrackings()]);
+
+  const eventIds = [...new Set(candidates.map((c) => c.position.eventId).filter(Boolean))];
+  const eventTitles = new Map();
+  await Promise.all(
+    eventIds.map(async (id) => {
+      try {
+        const event = await fetchEventById(id);
+        eventTitles.set(id, event && event.title);
+      } catch (e) {
+        /* nem sikerult lekerni ezt az eventet - a hozza tartozo pozit kihagyjuk */
+      }
+    })
+  );
+
+  const nowMs = Date.now();
+  const results = new Map();
+  for (const { position } of candidates) {
+    const eventTitle = eventTitles.get(position.eventId);
+    if (!eventTitle) continue;
+    const evaluation = evaluatePositionModel(position, eventTitle, posts, trackings, nowMs);
+    if (evaluation) results.set(position.asset, evaluation);
+  }
+  return results;
+}
+
 function parseBucketRange(label) {
   const clean = (label || "").trim();
   if (clean.endsWith("+")) {

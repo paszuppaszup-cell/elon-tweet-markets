@@ -15,6 +15,23 @@ function pnlColor(n) {
   return n >= 0 ? "var(--green)" : "var(--red)";
 }
 
+function renderEvaluationCell(evaluation) {
+  if (!evaluation) {
+    return '<span class="muted" style="font-size:12px;">n/a</span>';
+  }
+  const modelPct = (evaluation.modelP * 100).toFixed(1);
+  const priceCents = (evaluation.curPrice * 100).toFixed(1);
+  const detail = `modell: ${modelPct}% · ár: ${priceCents}c`;
+  if (evaluation.signal) {
+    return `
+      <div style="color:var(--red);font-weight:600;">Statisztikailag zárd le</div>
+      <div class="muted" style="font-size:11px;">${detail} · becsült megspórolt: ${fmtUsd(evaluation.edgeUsd)}</div>`;
+  }
+  return `
+    <div style="color:var(--green);">Tarts</div>
+    <div class="muted" style="font-size:11px;">${detail}</div>`;
+}
+
 function renderSkeleton() {
   accountContent.innerHTML = `
     <div class="panel">
@@ -37,9 +54,15 @@ function renderSkeleton() {
 
     <div class="panel">
       <h3>Nyitott pozíciók</h3>
+      <p class="muted" style="font-size:12px;">
+        Az "Értékelés" oszlop az Elon Musk tweet-szám pozíciókhoz egy Poisson-modellel
+        (az eddigi tweet-tempó alapján) megbecsüli a tartott sáv valós nyerési esélyét,
+        és összeveti a jelenlegi piaci árral — ha statisztikailag jobban jársz most
+        eladással, mint tartással, "Zárd le" jelzést kapsz. Csak matematikai becslés, nem garancia.
+      </p>
       <table>
         <thead>
-          <tr><th>Piac</th><th>Kimenet</th><th>Méret</th><th>Átl. ár</th><th>Jelenlegi érték</th><th>PnL</th></tr>
+          <tr><th>Piac</th><th>Kimenet</th><th>Méret</th><th>Átl. ár</th><th>Jelenlegi érték</th><th>PnL</th><th>Értékelés</th></tr>
         </thead>
         <tbody id="positionsRows"></tbody>
       </table>
@@ -100,21 +123,29 @@ async function loadAccount(address) {
     document.getElementById("portfolioValue").textContent = fmtUsd(value);
     document.getElementById("positionsCount").textContent = positions.length;
 
+    let evaluations = new Map();
+    try {
+      evaluations = await evaluateOpenPositions(positions);
+    } catch (e) {
+      /* modell-ertekeles nem elerheto - a poziciok listaja attol meg megjelenik */
+    }
+
     document.getElementById("positionsRows").innerHTML = positions.length
       ? positions
           .map(
             (p) => `
         <tr>
-          <td>${p.title}</td>
-          <td>${p.outcome}</td>
+          <td>${escapeHtml(p.title)}</td>
+          <td>${escapeHtml(p.outcome)}</td>
           <td>${Number(p.size).toLocaleString("hu-HU", { maximumFractionDigits: 2 })}</td>
           <td>${(p.avgPrice * 100).toFixed(1)}c</td>
           <td>${fmtUsd(p.currentValue)}</td>
           <td style="color:${pnlColor(p.cashPnl)};">${fmtUsd(p.cashPnl)} (${p.percentPnl.toFixed(1)}%)</td>
+          <td>${renderEvaluationCell(evaluations.get(p.asset))}</td>
         </tr>`
           )
           .join("")
-      : '<tr><td colspan="6" class="muted">Nincs nyitott pozíció ezen a címen.</td></tr>';
+      : '<tr><td colspan="7" class="muted">Nincs nyitott pozíció ezen a címen.</td></tr>';
 
     document.getElementById("tradesRows").innerHTML = trades.length
       ? trades
@@ -122,9 +153,9 @@ async function loadAccount(address) {
             (t) => `
         <tr>
           <td class="muted">${new Date(t.timestamp * 1000).toLocaleString("hu-HU")}</td>
-          <td style="color:${t.side === "BUY" ? "var(--green)" : "var(--red)"};">${t.side}</td>
-          <td>${t.title}</td>
-          <td>${t.outcome}</td>
+          <td style="color:${t.side === "BUY" ? "var(--green)" : "var(--red)"};">${escapeHtml(t.side)}</td>
+          <td>${escapeHtml(t.title)}</td>
+          <td>${escapeHtml(t.outcome)}</td>
           <td>${Number(t.size).toLocaleString("hu-HU", { maximumFractionDigits: 2 })}</td>
           <td>${(t.price * 100).toFixed(1)}c</td>
         </tr>`

@@ -117,7 +117,7 @@ function renderOpportunity(opp) {
     .map(
       (s) => `
       <tr>
-        <td>${s.label}</td>
+        <td>${escapeHtml(s.label)}</td>
         <td>${(s.price * 100).toFixed(1)}c</td>
         <td>${fmtUsd(s.stake)}</td>
       </tr>`
@@ -127,7 +127,7 @@ function renderOpportunity(opp) {
   return `
     <div class="card" style="cursor:default;">
       <div class="card-head">
-        <h3><a href="market.html?id=${opp.event.id}" style="color:inherit;">${opp.event.title}</a></h3>
+        <h3><a href="market.html?id=${encodeURIComponent(opp.event.id)}" style="color:inherit;">${escapeHtml(opp.event.title)}</a></h3>
         <span class="badge">${opp.hours.toFixed(1)} óra a zárásig</span>
       </div>
       ${opp.alreadyAlerted ? '<p style="font-size:12px;color:var(--yellow);margin:6px 0 0;">Erről már ment Telegram-értesítés</p>' : ""}
@@ -218,7 +218,7 @@ function renderBestPick(best, accountValue) {
     .map(
       (b) => `
       <tr>
-        <td>${b.label}</td>
+        <td>${escapeHtml(b.label)}</td>
         <td>${(b.price * 100).toFixed(1)}c</td>
         <td>${fmtUsd(shares * b.price)}</td>
       </tr>`
@@ -227,7 +227,7 @@ function renderBestPick(best, accountValue) {
 
   box.innerHTML = `
     <div class="card-head">
-      <h3><a href="market.html?id=${best.event.id}" style="color:inherit;">${best.event.title}</a></h3>
+      <h3><a href="market.html?id=${encodeURIComponent(best.event.id)}" style="color:inherit;">${escapeHtml(best.event.title)}</a></h3>
       <span class="badge">${best.hours.toFixed(1)} óra a zárásig</span>
     </div>
     <p class="muted" style="font-size:13px;">
@@ -281,7 +281,7 @@ async function refreshBestPick() {
     const best = findBestPickCandidate(events, currentConfig);
     renderBestPick(best, value);
   } catch (e) {
-    errorBox.innerHTML = `<div class="error-box">Hiba: ${e.message}</div>`;
+    errorBox.innerHTML = `<div class="error-box">Hiba: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -348,7 +348,7 @@ function renderPaceEntry(entry) {
     .map(
       (b) => `
       <tr>
-        <td>${b.label}</td>
+        <td>${escapeHtml(b.label)}</td>
         <td>${(b.price * 100).toFixed(1)}c</td>
         <td>${dist ? fmtUsd(b.stake) : "–"}</td>
       </tr>`
@@ -383,14 +383,14 @@ function renderPaceEntry(entry) {
   return `
     <div class="card" style="cursor:default;">
       <div class="card-head">
-        <h3><a href="market.html?id=${event.id}" style="color:inherit;">${event.title}</a></h3>
+        <h3><a href="market.html?id=${encodeURIComponent(event.id)}" style="color:inherit;">${escapeHtml(event.title)}</a></h3>
         <span class="badge">${liveState.daysRemaining.toFixed(1)} nap van hátra</span>
       </div>
       <p class="muted" style="font-size:13px;">
         Jelenleg <b>${liveState.count}</b> tweetnél tart, <b>${liveState.daysElapsed.toFixed(2)} nap</b> telt el eddig ·
         eddigi átlag:
         <b>${liveState.currentPace !== null ? liveState.currentPace.toFixed(1) + " tweet/nap" : "n/a (most kezdődött)"}</b> ·
-        Szcenáriók: napi <b>${segmentLabels.join(", ")}</b> tweet
+        Szcenáriók: napi <b>${escapeHtml(segmentLabels.join(", "))}</b> tweet
       </p>
       <table style="margin-top:10px;">
         <thead><tr><th>Sáv</th><th>Ár</th><th>Tét</th></tr></thead>
@@ -465,7 +465,7 @@ async function refreshPaceScenarios() {
       ? notice + entries.map(renderPaceEntry).join("")
       : '<p class="muted">Egyik aktív piacon sem találtam egyező sávot a kiválasztott tempó-sávokkal.</p>';
   } catch (e) {
-    listEl.innerHTML = `<div class="error-box">Hiba: ${e.message}</div>`;
+    listEl.innerHTML = `<div class="error-box">Hiba: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -526,7 +526,7 @@ document.getElementById("saveCfgBtn").addEventListener("click", async () => {
     document.getElementById("cfgPin").value = "";
     await loadSharedConfigAndRender();
   } catch (e) {
-    cfgErrorBox.innerHTML = `<div class="error-box">Hiba mentés közben: ${e.message}</div>`;
+    cfgErrorBox.innerHTML = `<div class="error-box">Hiba mentés közben: ${escapeHtml(e.message)}</div>`;
   }
 });
 

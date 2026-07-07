@@ -29,7 +29,7 @@ function renderEvents(events, liveStates) {
       const chips = top3
         .map((b) => {
           const label = b.groupItemTitle || b.outcomes[0] || "?";
-          return `<span class="chip">${label}: <b>${fmtPct(b.prices[0])}</b></span>`;
+          return `<span class="chip">${escapeHtml(label)}: <b>${fmtPct(b.prices[0])}</b></span>`;
         })
         .join("");
 
@@ -39,9 +39,9 @@ function renderEvents(events, liveStates) {
         : "";
 
       return `
-        <a class="card" href="market.html?id=${ev.id}">
+        <a class="card" href="market.html?id=${encodeURIComponent(ev.id)}">
           <div class="card-head">
-            <h3>${ev.title}</h3>
+            <h3>${escapeHtml(ev.title)}</h3>
             <span class="badge ${weekly ? "" : "monthly"}">${weekly ? "heti" : "havi"}</span>
           </div>
           <div class="muted" style="font-size:13px;margin-top:4px;">

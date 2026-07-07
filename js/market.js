@@ -31,7 +31,7 @@ function renderSkeleton(event) {
   contentEl.innerHTML = `
     <div class="panel">
       <div class="card-head">
-        <h3 style="font-size:20px;">${event.title}</h3>
+        <h3 style="font-size:20px;">${escapeHtml(event.title)}</h3>
         <span class="badge ${weekly ? "" : "monthly"}">${weekly ? "heti" : "havi"}</span>
       </div>
       <p class="muted">
@@ -82,9 +82,9 @@ function renderBuckets(buckets) {
       const price = b.prices[0] || 0;
       const checked = selectedBuckets.has(b.tokenIds[0]) ? "checked" : "";
       return `
-        <tr class="${i < 3 ? "top-row" : ""}" data-row-token="${b.tokenIds[0]}">
-          <td><input type="checkbox" data-token="${b.tokenIds[0]}" data-price="${(price * 100).toFixed(2)}" data-label="${bucketLabel(b)}" class="bucket-check" ${checked}></td>
-          <td>${bucketLabel(b)}</td>
+        <tr class="${i < 3 ? "top-row" : ""}" data-row-token="${escapeHtml(b.tokenIds[0])}">
+          <td><input type="checkbox" data-token="${escapeHtml(b.tokenIds[0])}" data-price="${(price * 100).toFixed(2)}" data-label="${escapeHtml(bucketLabel(b))}" class="bucket-check" ${checked}></td>
+          <td>${escapeHtml(bucketLabel(b))}</td>
           <td>${fmtPct(price)} (${(price * 100).toFixed(1)}c)</td>
           <td style="width:120px;"><div class="bar-track"><div class="bar-fill" style="width:${Math.min(price * 100, 100)}%"></div></div></td>
           <td class="muted">$${b.volume.toLocaleString("hu-HU", { maximumFractionDigits: 0 })}</td>
@@ -168,7 +168,7 @@ async function updateLiveCount(event, buckets) {
         </div>
         <div class="result-card">
           <div class="label">Jelenleg ebbe a sávba esne</div>
-          <div class="value" style="color:var(--green);">${matchLabel}</div>
+          <div class="value" style="color:var(--green);">${escapeHtml(matchLabel)}</div>
         </div>
       </div>
       <p class="muted" style="font-size:12px;margin-top:10px;">
@@ -178,7 +178,7 @@ async function updateLiveCount(event, buckets) {
       </p>
     `;
   } catch (e) {
-    box.innerHTML = `<p class="muted">Élő tweet-szám jelenleg nem elérhető (${e.message}).</p>`;
+    box.innerHTML = `<p class="muted">Élő tweet-szám jelenleg nem elérhető (${escapeHtml(e.message)}).</p>`;
   }
 }
 
@@ -247,6 +247,12 @@ async function init() {
     contentEl.innerHTML = '<p class="muted">Hiányzó piac azonosító.</p>';
     return;
   }
+  // A Polymarket esemeny-azonosito mindig szam - barmi mas (pl. URL-be
+  // csempeszett HTML) tamadasi kiserlet, korai elutasitas.
+  if (!/^\d+$/.test(eventId)) {
+    contentEl.innerHTML = '<p class="muted">Érvénytelen piac azonosító.</p>';
+    return;
+  }
   try {
     const event = await fetchEventById(eventId);
     renderSkeleton(event);
@@ -261,7 +267,7 @@ async function init() {
       "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
     setInterval(() => loadAndRender(true), REFRESH_MS);
   } catch (e) {
-    contentEl.innerHTML = `<p class="muted">Hiba az adatok betöltésekor: ${e.message}</p>`;
+    contentEl.innerHTML = `<p class="muted">Hiba az adatok betöltésekor: ${escapeHtml(e.message)}</p>`;
   }
 }
 

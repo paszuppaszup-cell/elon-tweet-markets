@@ -32,7 +32,7 @@ function addRow(value, label) {
     <label>sáv ára (cent)</label>
     <div class="row-inline">
       <input type="number" class="price-input" min="0" max="99.99" step="0.1" placeholder="pl. 15"
-        value="${value ?? ""}" data-label="${label || ""}">
+        value="${escapeHtml(value ?? "")}" data-label="${escapeHtml(label ?? "")}">
       <button type="button" class="remove-row-btn" title="Sáv eltávolítása">×</button>
     </div>
   `;
@@ -67,18 +67,18 @@ function renderPaceInfo(priceInputs) {
   const rows = rowsWithLabels
     .map(({ label, range }) => {
       if (current > range.max) {
-        return `<tr><td>${label}</td><td colspan="2" class="muted">már meghaladta ezt a sávot (jelenlegi: ${current})</td></tr>`;
+        return `<tr><td>${escapeHtml(label)}</td><td colspan="2" class="muted">már meghaladta ezt a sávot (jelenlegi: ${current})</td></tr>`;
       }
       const neededMin = Math.max(0, range.min - current);
       const perDayMin = neededMin / daysRemaining;
       if (range.max === Infinity) {
-        return `<tr><td>${label}</td><td colspan="2">legalább <b>${perDayMin.toFixed(1)}</b> tweet/nap kell (még ${neededMin} tweet, ${daysRemaining.toFixed(1)} nap alatt)</td></tr>`;
+        return `<tr><td>${escapeHtml(label)}</td><td colspan="2">legalább <b>${perDayMin.toFixed(1)}</b> tweet/nap kell (még ${neededMin} tweet, ${daysRemaining.toFixed(1)} nap alatt)</td></tr>`;
       }
       const neededMax = Math.max(0, range.max - current);
       const perDayMax = neededMax / daysRemaining;
       return `
         <tr>
-          <td>${label}</td>
+          <td>${escapeHtml(label)}</td>
           <td>${perDayMin.toFixed(1)}–${perDayMax.toFixed(1)} tweet/nap</td>
           <td class="muted">még ${neededMin}–${neededMax} tweet, ${daysRemaining.toFixed(1)} nap alatt</td>
         </tr>`;
