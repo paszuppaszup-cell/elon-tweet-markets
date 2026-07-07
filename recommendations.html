@@ -18,6 +18,30 @@
 </header>
 <main>
   <div class="panel">
+    <h3 style="margin-top:0;">Legjobb ajánlat a fiókod alapján</h3>
+    <p class="muted" style="font-size:13px;">
+      10 percenként végignézi az összes aktív piacot (a lenti "Max óra a zárásig"
+      beállításon belül), és minden piacnál a legvalószínűbb sávoktól indulva
+      addig gyűjt hozzá további sávokat, amíg a garantált megtérülés el nem éri
+      a lenti "Min. megtérülés %" beállítást — minél több sáv fér bele eddig a
+      határig, annál nagyobb az esély, hogy valamelyik bejön, de a profit még
+      mindig érdemi marad. A piacok közül azt ajánlja, ahol ez az esély a
+      legnagyobb, és a teljes fiók-egyenleged erre a kombinációra osztja szét.
+    </p>
+    <div class="calc-grid" style="grid-template-columns: 1fr auto;">
+      <div class="field">
+        <label>Wallet cím (0x...)</label>
+        <input type="text" id="bestAddressInput" placeholder="0x1234...abcd">
+      </div>
+      <div class="field" style="justify-content:flex-end;display:flex;align-items:flex-end;">
+        <button id="bestLoadBtn">Betöltés</button>
+      </div>
+    </div>
+    <div id="bestErrorBox"></div>
+    <div id="bestPickBox" class="loading">Add meg a wallet-címed a fiók-alapú ajánláshoz.</div>
+  </div>
+
+  <div class="panel">
     <h3 style="margin-top:0;">Beállítások</h3>
     <p class="muted" style="font-size:13px;">
       Ugyanaz a logika, mint a Telegram-bot (<code>alerts.py</code>) használ: minden
@@ -67,6 +91,6 @@
 </main>
 <footer>Adatok: Polymarket Gamma API (nyilvános, élő). Nem befektetési tanács.</footer>
 <script src="js/api.js?v=5"></script>
-<script src="js/recommendations.js?v=2"></script>
+<script src="js/recommendations.js?v=4"></script>
 </body>
 </html>

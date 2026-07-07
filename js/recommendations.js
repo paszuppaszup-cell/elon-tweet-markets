@@ -1,4 +1,6 @@
 const REFRESH_MS = 60000;
+const BEST_PICK_REFRESH_MS = 600000; // 10 perc
+const WALLET_STORAGE_KEY = "polymarket_wallet_address"; // ugyanaz, mint account.js
 const DEFAULT_CONFIG = {
   targetProfit: 20,
   maxHours: 48,
@@ -149,6 +151,134 @@ function fmtUsd(n) {
   return "$" + n.toLocaleString("hu-HU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// A "legjobb" javaslat a teljes fiok-egyenleget osztja szet arra a
+// kombinaciora, amelyiknel a legvalószínűbb, hogy valamelyik sav bejon -
+// DE csak addig gyujt hozza tovabbi savokat, amig a garantalt megterules
+// (1/sumPrice - 1) el nem eri a "Min. megterules %" beallitast. Enelkul a
+// mohomod simán 100%-hoz kozeli esellyel, de kb. 0% profittal talalna
+// "legjobb" kombinaciot (minel tobb savot vonsz be, annal kisebb a profit-
+// resz) - az uj hatar biztositja, hogy a valasztott esely+profit par
+// tenyleg ertelmes novekedest igerjen, nem csak "biztos nullat".
+function greedyComboWithReturnFloor(buckets, maxLegs, minReturnPct) {
+  const maxSum = 1 / (1 + minReturnPct / 100);
+  const combo = [];
+  let total = 0;
+  for (const b of buckets) {
+    if (combo.length >= maxLegs) break;
+    if (total + b.price > maxSum) continue;
+    combo.push(b);
+    total += b.price;
+  }
+  return { combo, total };
+}
+
+function findBestPickCandidate(events, config) {
+  const candidates = events
+    .map((event) => {
+      const hours = hoursUntil(event.endDate);
+      if (hours <= 0 || hours > config.maxHours) return null;
+
+      const buckets = loadBucketsFromEvent(event);
+      if (buckets.length < config.minLegs) return null;
+
+      const { combo, total } = greedyComboWithReturnFloor(buckets, config.maxLegs, config.minReturnPct);
+      if (combo.length < config.minLegs || total <= 0) return null;
+
+      return { event, hours, combo, sumPrice: total };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.sumPrice - a.sumPrice);
+
+  return candidates[0] || null;
+}
+
+function renderBestPick(best, accountValue) {
+  const box = document.getElementById("bestPickBox");
+  if (!best) {
+    box.innerHTML = '<p class="muted">Jelenleg nincs megfelelő kombináció a beállított feltételekkel (max óra, min/max sáv) — próbáld lazítani a "Beállítások" panelben.</p>';
+    return;
+  }
+  if (!accountValue || accountValue <= 0) {
+    box.innerHTML = '<p class="muted">A fiók egyenlege $0 vagy nem elérhető ezen a címen, nincs mit befektetni.</p>';
+    return;
+  }
+
+  const totalStake = accountValue;
+  const shares = totalStake / best.sumPrice;
+  const profit = shares - totalStake;
+  const multiple = shares / totalStake;
+
+  const rows = best.combo
+    .map(
+      (b) => `
+      <tr>
+        <td>${b.label}</td>
+        <td>${(b.price * 100).toFixed(1)}c</td>
+        <td>${fmtUsd(shares * b.price)}</td>
+      </tr>`
+    )
+    .join("");
+
+  box.innerHTML = `
+    <div class="card-head">
+      <h3><a href="market.html?id=${best.event.id}" style="color:inherit;">${best.event.title}</a></h3>
+      <span class="badge">${best.hours.toFixed(1)} óra a zárásig</span>
+    </div>
+    <p class="muted" style="font-size:13px;">
+      Fiók egyenleg: <b>${fmtUsd(accountValue)}</b> ·
+      Együttes esély (a kiválasztott sávok): <b>${(best.sumPrice * 100).toFixed(1)}%</b>
+    </p>
+    <table style="margin-top:10px;">
+      <thead><tr><th>Sáv</th><th>Ár</th><th>Ennyit tegyél be</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="result-grid" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="result-card">
+        <div class="label">Teljes tét (a fiók egyenlege)</div>
+        <div class="value">${fmtUsd(totalStake)}</div>
+      </div>
+      <div class="result-card">
+        <div class="label">Kifizetés, ha bejön</div>
+        <div class="value">${fmtUsd(shares)}</div>
+      </div>
+      <div class="result-card">
+        <div class="label">Profit, ha bejön</div>
+        <div class="value" style="color:var(--green);">${fmtUsd(profit)}</div>
+      </div>
+      <div class="result-card">
+        <div class="label">Szorzó</div>
+        <div class="value">${multiple.toFixed(2)}×</div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:10px;">Utolsó frissítés: ${new Date().toLocaleTimeString("hu-HU")}</p>
+  `;
+}
+
+function getStoredWalletAddress() {
+  return localStorage.getItem(WALLET_STORAGE_KEY) || "";
+}
+
+async function refreshBestPick() {
+  const address = getStoredWalletAddress();
+  const box = document.getElementById("bestPickBox");
+  const errorBox = document.getElementById("bestErrorBox");
+  errorBox.innerHTML = "";
+
+  if (!address) {
+    box.innerHTML = '<p class="muted">Add meg a wallet-címed a fiók-alapú ajánláshoz.</p>';
+    return;
+  }
+
+  box.innerHTML = '<p class="loading">Betöltés...</p>';
+  try {
+    const [value, events] = await Promise.all([fetchPortfolioValue(address), searchElonTweetEvents()]);
+    const best = findBestPickCandidate(events, currentConfig);
+    renderBestPick(best, value);
+  } catch (e) {
+    errorBox.innerHTML = `<div class="error-box">Hiba: ${e.message}</div>`;
+  }
+}
+
 async function refresh() {
   statusEl.textContent = "Frissítés...";
   try {
@@ -186,6 +316,7 @@ async function loadSharedConfigAndRender() {
   }
   fillConfigForm(currentConfig);
   refresh();
+  refreshBestPick();
 }
 
 document.getElementById("saveCfgBtn").addEventListener("click", async () => {
@@ -211,5 +342,22 @@ document.getElementById("saveCfgBtn").addEventListener("click", async () => {
 
 document.getElementById("refreshBtn").addEventListener("click", refresh);
 
+document.getElementById("bestLoadBtn").addEventListener("click", () => {
+  const addr = document.getElementById("bestAddressInput").value.trim();
+  const errorBox = document.getElementById("bestErrorBox");
+  if (!isValidPolygonAddress(addr)) {
+    errorBox.innerHTML = '<div class="error-box">Érvénytelen cím — 0x-szal kezdődő, 42 karakteres Polygon címet adj meg.</div>';
+    return;
+  }
+  localStorage.setItem(WALLET_STORAGE_KEY, addr);
+  refreshBestPick();
+});
+
+const storedWalletAddress = getStoredWalletAddress();
+if (storedWalletAddress) {
+  document.getElementById("bestAddressInput").value = storedWalletAddress;
+}
+
 loadSharedConfigAndRender();
 setInterval(refresh, REFRESH_MS);
+setInterval(refreshBestPick, BEST_PICK_REFRESH_MS);
