@@ -56,6 +56,119 @@ async function saveSharedConfig(pin, config) {
   return resp.json(); // true / false
 }
 
+// --- Tweet-naplo / statisztika (stats.html) ---
+// A tweet_log tabla Elon Musk osszes ismert posztjanak idobelyeget tarolja
+// (a Python tweet-watch bot tolti fel/frissiti 10 percenkent) - ebbol
+// epul fel a napi/heti/oraszakos tweet-dinamika statisztika. A PostgREST
+// alapertelmezetten max 1000 sort ad vissza kerdesenkent, ezert lapozni
+// kell (Range fejlec) az osszes ~10 ezer+ sor lekeresehez.
+const TWEET_LOG_CACHE_KEY = "tweet-log-all";
+const TWEET_LOG_CACHE_TTL_MS = 300000; // 5 perc - nagy adatmennyiseg, nem kell percenkent ujra
+
+async function fetchAllTweetLog() {
+  try {
+    const raw = sessionStorage.getItem(TWEET_LOG_CACHE_KEY);
+    if (raw) {
+      const { t, data } = JSON.parse(raw);
+      if (Date.now() - t <= TWEET_LOG_CACHE_TTL_MS) return data;
+    }
+  } catch (e) {
+    /* sessionStorage corrupt/unavailable - csak ujra letoltjuk */
+  }
+
+  const pageSize = 1000;
+  let offset = 0;
+  const all = [];
+  for (;;) {
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/tweet_log?select=created_at&order=created_at.asc`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Range: `${offset}-${offset + pageSize - 1}`,
+        },
+      }
+    );
+    if (!resp.ok && resp.status !== 206) throw new Error(`Supabase HTTP ${resp.status}`);
+    const page = await resp.json();
+    all.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  try {
+    sessionStorage.setItem(TWEET_LOG_CACHE_KEY, JSON.stringify({ t: Date.now(), data: all }));
+  } catch (e) {
+    /* sessionStorage full/unavailable - ignore, csak nem cache-eljuk */
+  }
+  return all;
+}
+
+// Napi bontas UTC naptari nap szerint - {dateStr: count}. Csak azok a napok
+// szerepelnek, amiken volt legalabb 1 tweet.
+function aggregateDailyCounts(entries) {
+  const counts = new Map();
+  for (const e of entries) {
+    const day = e.created_at.slice(0, 10);
+    counts.set(day, (counts.get(day) || 0) + 1);
+  }
+  return counts;
+}
+
+// A napi szamlalot folytonos sorozatta egesziti ki (a hianyzo, 0-tweetes
+// napokkal is) - igy a grafikonon a csendes idoszakok is lathatoak, nem
+// csak azok a napok, amiken tortent valami.
+function fillDailySeries(countsMap) {
+  const days = [...countsMap.keys()].sort();
+  if (!days.length) return [];
+  const start = new Date(days[0] + "T00:00:00Z");
+  const end = new Date(days[days.length - 1] + "T00:00:00Z");
+  const series = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    series.push({ date: key, count: countsMap.get(key) || 0 });
+  }
+  return series;
+}
+
+function rollingAverage(series, windowDays) {
+  const result = [];
+  let sum = 0;
+  const window = [];
+  for (const point of series) {
+    window.push(point.count);
+    sum += point.count;
+    if (window.length > windowDays) sum -= window.shift();
+    result.push({ date: point.date, avg: sum / window.length });
+  }
+  return result;
+}
+
+// Atlag tweet/nap a het napjai szerint (UTC, 0=vasarnap...6=szombat) - csak
+// a tenylegesen szereplo napokon szamol atlagot (nem torzitja a sorozat elott
+// nem letezo idoszak).
+function dayOfWeekAverages(series) {
+  const sums = new Array(7).fill(0);
+  const counts = new Array(7).fill(0);
+  for (const point of series) {
+    const dow = new Date(point.date + "T00:00:00Z").getUTCDay();
+    sums[dow] += point.count;
+    counts[dow] += 1;
+  }
+  return sums.map((s, i) => (counts[i] ? s / counts[i] : 0));
+}
+
+// Oranankenti (UTC) eloszlas a nyers bejegyzesekbol.
+function hourOfDayCounts(entries) {
+  const counts = new Array(24).fill(0);
+  for (const e of entries) {
+    const hour = new Date(e.created_at).getUTCHours();
+    counts[hour] += 1;
+  }
+  return counts;
+}
+
 async function fetchSentAlertComboKeys() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/sent_alerts?select=combo_key`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },

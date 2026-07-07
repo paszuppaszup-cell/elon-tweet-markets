@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statisztika — Elon Musk Tweet Piacok</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Elon Musk Tweet Piacok</h1>
+  <nav>
+    <a href="index.html">Piacok</a>
+    <a href="calculator.html">Kalkulátor</a>
+    <a href="account.html">Fiókom</a>
+    <a href="recommendations.html">Javaslatok</a>
+    <a href="stats.html" class="active">Statisztika</a>
+  </nav>
+</header>
+<main>
+  <div class="panel">
+    <h3 style="margin-top:0;">Elon Musk tweet-dinamikája</h3>
+    <p class="muted" style="font-size:13px;">
+      A tweet-figyelő bot (<code>tweet_watch.py</code>) 10 percenként naplózza az összes
+      újonnan látott posztot egy állandó adatbázisba — ebből épül fel az alábbi teljes
+      előzmény. Forrás: xtracker.polymarket.com (a piacok hivatalos elszámolási forrása),
+      visszamenőleg annyira, ameddig az xtracker adatot ad.
+    </p>
+    <div class="status-bar">
+      <span id="statusText">Betöltés...</span>
+      <button id="refreshBtn">Frissítés</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="result-grid" id="summaryGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));"></div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Napi tweet-szám (7 napos mozgóátlaggal)</h3>
+    <canvas id="dailyChart" height="90"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Átlag tweet/nap a hét napjai szerint (UTC)</h3>
+    <canvas id="weekdayChart" height="70"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Óránkénti eloszlás (UTC)</h3>
+    <canvas id="hourChart" height="70"></canvas>
+  </div>
+</main>
+<footer>Adatok: xtracker.polymarket.com (nyilvános). A napló a bot indítása előtti időszakra is tartalmaz visszatöltött adatot.</footer>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" integrity="sha384-b0GXujLkk9eYYSmcSfoyZbfyElGAQnDyY0skCHSG6w3JgTMFnz11ggrTAr7seu9f" crossorigin="anonymous"></script>
+<script src="js/api.js?v=9"></script>
+<script src="js/stats.js?v=1"></script>
+</body>
+</html>
