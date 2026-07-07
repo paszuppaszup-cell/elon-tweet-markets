@@ -135,7 +135,13 @@ async function updateLiveCount(event, buckets) {
   if (!box) return;
   try {
     const trackings = await fetchElonTrackings();
-    const window_ = findTrackingWindow(trackings, event.title);
+    let window_ = findTrackingWindow(trackings, event.title);
+    if (!window_) {
+      // heti piacoknal az xtracker pontos ablakat ad - havi piacoknal nincs
+      // kulon tracking rekord, ezert a cimbol (pl. "in July 2026") szamoljuk
+      // ki a naptari honap hataraiat becslesként.
+      window_ = parseMonthlyWindowFromTitle(event.title);
+    }
     if (!window_) {
       box.innerHTML = '<p class="muted">Ehhez a piachoz nincs egyező élő számláló az xtracker-en (cím nem egyezik).</p>';
       return;
@@ -168,6 +174,7 @@ async function updateLiveCount(event, buckets) {
       <p class="muted" style="font-size:12px;margin-top:10px;">
         Számlálási ablak: ${new Date(window_.startDate).toLocaleString("hu-HU")} –
         ${new Date(window_.endDate).toLocaleString("hu-HU")}
+        ${window_.estimated ? " (becsült naptári hónap, nincs pontos xtracker ablak ehhez a piachoz)" : ""}
       </p>
     `;
   } catch (e) {

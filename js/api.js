@@ -105,6 +105,29 @@ function findTrackingWindow(trackings, eventTitle) {
   return match ? { startDate: match.startDate, endDate: match.endDate } : null;
 }
 
+// A havi ("Elon Musk # tweets in July 2026?") eseményekhez az xtracker NEM
+// vezet kulon "tracking" rekordot (csak a heti/rovidebb ablakokat koveti),
+// szoval ilyenkor a cimbol szamoljuk ki a naptari honap hataraiat. A
+// Polymarket ezeket a piacokat megfigyelheto modon UTC-4 (ET) eltolassal
+// definialja (lasd a heti ablakok pontos xtracker idobelyegeit) - ugyanazt
+// az eltolast hasznaljuk itt is. Kevesbe pontos, mint a heti xtracker
+// tracking, de jo becsles, ha nincs mas forras.
+const MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+function parseMonthlyWindowFromTitle(title) {
+  const match = (title || "").toLowerCase().match(/in (\w+) (\d{4})/);
+  if (!match) return null;
+  const monthIdx = MONTH_NAMES.indexOf(match[1]);
+  if (monthIdx === -1) return null;
+  const year = parseInt(match[2], 10);
+  const start = new Date(Date.UTC(year, monthIdx, 1, 4, 0, 0));
+  const end = new Date(Date.UTC(year, monthIdx + 1, 1, 3, 59, 59));
+  return { startDate: start.toISOString(), endDate: end.toISOString(), estimated: true };
+}
+
 function countPostsInWindow(posts, startIso, endIso) {
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
