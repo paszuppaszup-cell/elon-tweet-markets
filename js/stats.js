@@ -1,4 +1,5 @@
 const WEEKDAY_NAMES_HU = ["Vas", "Hét", "Kedd", "Szer", "Csüt", "Pén", "Szo"];
+const WEEKDAY_NAMES_FULL_HU = ["vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat"];
 const statusEl = document.getElementById("statusText");
 
 let dailyChartInstance = null;
@@ -144,6 +145,103 @@ function renderHourChart(entries) {
       plugins: { legend: { display: false } },
     },
   });
+}
+
+function buildConclusion(ins, curL, prevL, faster) {
+  if (ins.paceDeltaPct === null) {
+    return `${escapeHtml(curL)} még korai szakaszban van, egyelőre kevés az adat a megbízható következtetéshez.`;
+  }
+  const dir = faster ? "aktívabb" : "csendesebb";
+  let s = `${escapeHtml(curL)} eddig érezhetően ${dir}, mint ${escapeHtml(prevL)} volt`;
+  if (ins.trend === "accelerating") s += ", és a tempó a hónapon belül tovább gyorsul";
+  else if (ins.trend === "slowing") s += ", és a tempó a hónapon belül tovább lassul";
+  else if (ins.trend === "stable") s += ", a tempó pedig stabilan tartja magát";
+  s += ". ";
+  if (ins.cur.isOngoing) {
+    const higher = ins.cur.projectedMonthTotal >= ins.prev.count;
+    s += `Ha ez így marad, a hónap kb. <b>${fmtNum(ins.cur.projectedMonthTotal, 0)}</b> tweettel zár, ami ${
+      higher ? "több" : "kevesebb"
+    }, mint ${escapeHtml(prevL)} ${ins.prev.count} tweetje.`;
+  }
+  return s;
+}
+
+function renderMonthInsights(entries) {
+  const box = document.getElementById("monthInsightsBox");
+  const ins = buildMonthInsights(entries, Date.now());
+  const curL = monthLabel(ins.curYear, ins.curMonth);
+  const prevL = monthLabel(ins.prevYear, ins.prevMonth);
+
+  if (!ins.cur.count) {
+    box.innerHTML = `<p class="muted">${escapeHtml(curL)}-ban még nincs naplózott tweet — amint jön adat, itt megjelenik az elemzés.</p>`;
+    return;
+  }
+
+  const faster = ins.paceDeltaPct !== null && ins.paceDeltaPct >= 0;
+  const paceColor = faster ? "var(--green)" : "var(--red)";
+  const trendWord =
+    ins.trend === "accelerating"
+      ? "gyorsul"
+      : ins.trend === "slowing"
+      ? "lassul"
+      : ins.trend === "stable"
+      ? "nagyjából stabil"
+      : null;
+
+  const lines = [];
+  lines.push(
+    `Elon eddig <b>${ins.cur.count}</b> tweetet írt ${escapeHtml(curL)} folyamán, az eltelt <b>${ins.cur.daysElapsed.toFixed(
+      1
+    )} nap</b> alatt — ez napi <b>${fmtNum(ins.cur.avgPerDay)}</b> tweet átlag.`
+  );
+  if (ins.paceDeltaPct !== null) {
+    lines.push(
+      `Ez az előző hónaphoz (${escapeHtml(prevL)}: napi ${fmtNum(ins.prev.avgPerDay)}) képest <b style="color:${paceColor};">${fmtNum(
+        Math.abs(ins.paceDeltaPct)
+      )}%-kal ${faster ? "gyorsabb" : "lassabb"}</b>.`
+    );
+  }
+  if (ins.cur.isOngoing) {
+    lines.push(
+      `A mostani tempóval a hónap végére kb. <b>${fmtNum(ins.cur.projectedMonthTotal, 0)}</b> tweet várható (${escapeHtml(
+        prevL
+      )} összesen: ${ins.prev.count}).`
+    );
+  }
+  if (ins.busiestDayDate) {
+    lines.push(`A legaktívabb nap eddig <b>${ins.busiestDayDate}</b> volt (${ins.busiestDayCount} tweet).`);
+  }
+  if (ins.busiestHour >= 0) {
+    lines.push(
+      `Napon belül jellemzően <b>${String(ins.busiestHour).padStart(2, "0")}:00 (UTC)</b> körül a legaktívabb (átlag ${fmtNum(
+        ins.busiestHourPerDay,
+        2
+      )} tweet ebben az órában naponta).`
+    );
+  }
+  if (ins.busiestWeekday >= 0) {
+    lines.push(
+      `A hét napjai közül eddig <b>${WEEKDAY_NAMES_FULL_HU[ins.busiestWeekday]}</b> a legaktívabb (átlag ${fmtNum(
+        ins.busiestWeekdayAvg
+      )} tweet/nap).`
+    );
+  }
+  if (trendWord) {
+    lines.push(
+      `Az elmúlt ${Math.min(3, ins.completedDays)} lezárt nap tempója a havi átlaghoz mérve: <b>${trendWord}</b> (utóbbi napok: ${fmtNum(
+        ins.recentAvg
+      )}/nap vs. havi ${fmtNum(ins.monthAvgCompleted)}/nap).`
+    );
+  }
+
+  const conclusion = buildConclusion(ins, curL, prevL, faster);
+
+  box.innerHTML = `
+    <p class="muted" style="font-size:13px;line-height:1.75;">${lines.join(" ")}</p>
+    <div style="margin-top:12px;padding:10px 14px;border-left:3px solid var(--accent);background:rgba(127,127,127,0.08);border-radius:4px;font-size:13px;line-height:1.6;">
+      <b>Következtetés (${escapeHtml(curL)}):</b> ${conclusion}
+    </div>
+  `;
 }
 
 function monthLabel(year, monthIndex0) {
@@ -351,6 +449,7 @@ async function load() {
     const dailyCounts = aggregateDailyCounts(entries);
     const series = fillDailySeries(dailyCounts);
 
+    renderMonthInsights(entries);
     renderSummary(entries, series);
     renderDailyChart(series);
     renderWeekdayChart(series);

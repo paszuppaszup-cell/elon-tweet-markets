@@ -270,6 +270,102 @@ function padSeries(arr, length) {
   return out;
 }
 
+// Osszegyujti a jelenlegi (folyamatban levo) honap kulcs-mutatoit az
+// automatikus szoveges elemzeshez (lasd stats.js renderMonthInsights):
+// tempo az elozo honaphoz kepest, becsult havi osszeg, legaktivabb nap/ora/
+// hetnap, es a honapon beluli trend (gyorsul/lassul/stabil). Minden UTC
+// naptari honap szerint, a mar bekovetkezett idore vetitve.
+function buildMonthInsights(entries, nowMs) {
+  const now = new Date(nowMs);
+  const curYear = now.getUTCFullYear();
+  const curMonth = now.getUTCMonth();
+  let prevYear = curYear;
+  let prevMonth = curMonth - 1;
+  if (prevMonth < 0) {
+    prevMonth = 11;
+    prevYear -= 1;
+  }
+
+  const cur = summarizeMonth(entries, curYear, curMonth, nowMs);
+  const prev = summarizeMonth(entries, prevYear, prevMonth, nowMs);
+
+  const { start } = monthBounds(curYear, curMonth);
+  const dom = dayOfMonthCounts(entries, curYear, curMonth, nowMs);
+
+  // Legaktivabb nap (a null jovobeli napokat kihagyva).
+  let busiestIdx = -1;
+  let busiestVal = -1;
+  for (let i = 0; i < dom.length; i++) {
+    if (dom[i] != null && dom[i] > busiestVal) {
+      busiestVal = dom[i];
+      busiestIdx = i;
+    }
+  }
+  const busiestDayDate =
+    busiestIdx >= 0 ? new Date(start.getTime() + busiestIdx * 86400000).toISOString().slice(0, 10) : null;
+
+  // Csak a MAR LEZART (teljesen eltelt) napok a honapon beluli trendhez -
+  // a mai, meg folyamatban levo nap reszleges szama nem torzitja.
+  const completed = [];
+  for (let i = 0; i < dom.length; i++) {
+    if (dom[i] != null && start.getTime() + (i + 1) * 86400000 <= nowMs) completed.push(dom[i]);
+  }
+  let trend = null;
+  let recentAvg = null;
+  let monthAvgCompleted = null;
+  if (completed.length >= 4) {
+    monthAvgCompleted = completed.reduce((a, b) => a + b, 0) / completed.length;
+    const n = Math.min(3, completed.length);
+    const recent = completed.slice(-n);
+    recentAvg = recent.reduce((a, b) => a + b, 0) / n;
+    const ratio = monthAvgCompleted > 0 ? recentAvg / monthAvgCompleted : 1;
+    trend = ratio >= 1.15 ? "accelerating" : ratio <= 0.85 ? "slowing" : "stable";
+  }
+
+  // Legaktivabb ora (napi atlagra vetitve, hogy ne a nyers darabszam
+  // dontson egy rovid honapnal).
+  const hourRaw = hourOfDayCountsForMonth(entries, curYear, curMonth);
+  let busiestHour = -1;
+  let busiestHourVal = -1;
+  for (let h = 0; h < 24; h++) {
+    if (hourRaw[h] > busiestHourVal) {
+      busiestHourVal = hourRaw[h];
+      busiestHour = h;
+    }
+  }
+  const busiestHourPerDay = cur.daysElapsed > 0 ? busiestHourVal / cur.daysElapsed : 0;
+
+  // Legaktivabb hetnap a honapon belul (atlag az adott hetnap elofordulasaira).
+  const wdSum = new Array(7).fill(0);
+  const wdDays = new Array(7).fill(0);
+  for (let i = 0; i < dom.length; i++) {
+    if (dom[i] == null) continue;
+    const dow = new Date(start.getTime() + i * 86400000).getUTCDay();
+    wdSum[dow] += dom[i];
+    wdDays[dow] += 1;
+  }
+  let busiestWeekday = -1;
+  let busiestWeekdayAvg = -1;
+  for (let d = 0; d < 7; d++) {
+    if (!wdDays[d]) continue;
+    const avg = wdSum[d] / wdDays[d];
+    if (avg > busiestWeekdayAvg) {
+      busiestWeekdayAvg = avg;
+      busiestWeekday = d;
+    }
+  }
+
+  const paceDeltaPct = prev.avgPerDay > 0 ? ((cur.avgPerDay - prev.avgPerDay) / prev.avgPerDay) * 100 : null;
+
+  return {
+    curYear, curMonth, prevYear, prevMonth, cur, prev, paceDeltaPct,
+    busiestDayDate, busiestDayCount: busiestVal >= 0 ? busiestVal : null,
+    busiestHour, busiestHourPerDay,
+    busiestWeekday, busiestWeekdayAvg,
+    trend, recentAvg, monthAvgCompleted, completedDays: completed.length,
+  };
+}
+
 async function fetchSentAlertComboKeys() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/sent_alerts?select=combo_key`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
