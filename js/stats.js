@@ -4,6 +4,9 @@ const statusEl = document.getElementById("statusText");
 let dailyChartInstance = null;
 let weekdayChartInstance = null;
 let hourChartInstance = null;
+let dayOfMonthChartInstance = null;
+let weekOfMonthChartInstance = null;
+let hourCompareChartInstance = null;
 
 function fmtNum(n, digits = 1) {
   return Number(n).toLocaleString("hu-HU", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -143,6 +146,194 @@ function renderHourChart(entries) {
   });
 }
 
+function monthLabel(year, monthIndex0) {
+  return new Date(Date.UTC(year, monthIndex0, 1)).toLocaleDateString("hu-HU", {
+    year: "numeric",
+    month: "long",
+  });
+}
+
+function getPrevAndCurrentMonth() {
+  const now = new Date();
+  const curYear = now.getUTCFullYear();
+  const curMonth = now.getUTCMonth();
+  let prevYear = curYear;
+  let prevMonth = curMonth - 1;
+  if (prevMonth < 0) {
+    prevMonth = 11;
+    prevYear -= 1;
+  }
+  return { curYear, curMonth, prevYear, prevMonth };
+}
+
+function renderMonthCompareSummary(entries) {
+  const nowMs = Date.now();
+  const { curYear, curMonth, prevYear, prevMonth } = getPrevAndCurrentMonth();
+
+  const prev = summarizeMonth(entries, prevYear, prevMonth, nowMs);
+  const cur = summarizeMonth(entries, curYear, curMonth, nowMs);
+
+  const rows = [
+    { label: "Napi átlag (tweet/nap)", prev: fmtNum(prev.avgPerDay), cur: fmtNum(cur.avgPerDay) },
+    { label: "Heti átlag (tweet/hét)", prev: fmtNum(prev.avgPerWeek), cur: fmtNum(cur.avgPerWeek) },
+    { label: "Órás átlag (tweet/óra)", prev: fmtNum(prev.avgPerHour, 2), cur: fmtNum(cur.avgPerHour, 2) },
+    {
+      label: "Havi összesen",
+      prev: prev.count.toLocaleString("hu-HU"),
+      cur: cur.isOngoing
+        ? `${cur.count.toLocaleString("hu-HU")} eddig (becsült teljes hónap: ${fmtNum(cur.projectedMonthTotal, 0)})`
+        : cur.count.toLocaleString("hu-HU"),
+    },
+  ];
+
+  const pctChange = prev.avgPerDay > 0 ? ((cur.avgPerDay - prev.avgPerDay) / prev.avgPerDay) * 100 : null;
+  const pctLabel =
+    pctChange === null
+      ? ""
+      : ` · napi tempó változása: <b style="color:${pctChange >= 0 ? "var(--green)" : "var(--red)"};">${
+          pctChange >= 0 ? "+" : ""
+        }${fmtNum(pctChange)}%</b>`;
+
+  document.getElementById("monthCompareBox").innerHTML = `
+    <p class="muted" style="font-size:13px;">
+      ${escapeHtml(monthLabel(prevYear, prevMonth))} (teljes hónap, ${prev.totalDaysInMonth} nap) vs.
+      ${escapeHtml(monthLabel(curYear, curMonth))}
+      (eddig ${cur.daysElapsed.toFixed(1)} nap telt el a ${cur.totalDaysInMonth}-ból)${pctLabel}
+    </p>
+    <table>
+      <thead>
+        <tr><th></th><th>${escapeHtml(monthLabel(prevYear, prevMonth))}</th><th>${escapeHtml(monthLabel(curYear, curMonth))}</th></tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((r) => `<tr><td>${escapeHtml(r.label)}</td><td>${r.prev}</td><td>${r.cur}</td></tr>`)
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  return { prev, cur, prevYear, prevMonth, curYear, curMonth };
+}
+
+function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth) {
+  const prevCounts = dayOfMonthCounts(entries, prevYear, prevMonth);
+  const curCounts = dayOfMonthCounts(entries, curYear, curMonth);
+  const maxLen = Math.max(prevCounts.length, curCounts.length);
+  const labels = Array.from({ length: maxLen }, (_, i) => i + 1);
+
+  const ctx = document.getElementById("dayOfMonthChart");
+  if (dayOfMonthChartInstance) dayOfMonthChartInstance.destroy();
+  dayOfMonthChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: monthLabel(prevYear, prevMonth),
+          data: padSeries(prevCounts, maxLen),
+          backgroundColor: "#8b93a755",
+          borderColor: "#8b93a7",
+          borderWidth: 1,
+        },
+        {
+          label: monthLabel(curYear, curMonth),
+          data: padSeries(curCounts, maxLen),
+          backgroundColor: "#4f8cff55",
+          borderColor: "#4f8cff",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
+        y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
+      },
+      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+    },
+  });
+}
+
+function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth) {
+  const prevWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, prevYear, prevMonth));
+  const curWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, curYear, curMonth));
+  const maxLen = Math.max(prevWeeks.length, curWeeks.length);
+  const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}. hét`);
+
+  const ctx = document.getElementById("weekOfMonthChart");
+  if (weekOfMonthChartInstance) weekOfMonthChartInstance.destroy();
+  weekOfMonthChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: monthLabel(prevYear, prevMonth),
+          data: padSeries(prevWeeks, maxLen),
+          backgroundColor: "#8b93a755",
+          borderColor: "#8b93a7",
+          borderWidth: 1,
+        },
+        {
+          label: monthLabel(curYear, curMonth),
+          data: padSeries(curWeeks, maxLen),
+          backgroundColor: "#2ecc7155",
+          borderColor: "#2ecc71",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
+        y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
+      },
+      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+    },
+  });
+}
+
+function renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth) {
+  const prevCounts = hourOfDayCountsForMonth(entries, prevYear, prevMonth);
+  const curCounts = hourOfDayCountsForMonth(entries, curYear, curMonth);
+  const labels = prevCounts.map((_, h) => `${String(h).padStart(2, "0")}:00`);
+
+  const ctx = document.getElementById("hourCompareChart");
+  if (hourCompareChartInstance) hourCompareChartInstance.destroy();
+  hourCompareChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: monthLabel(prevYear, prevMonth),
+          data: prevCounts,
+          backgroundColor: "#8b93a755",
+          borderColor: "#8b93a7",
+          borderWidth: 1,
+        },
+        {
+          label: monthLabel(curYear, curMonth),
+          data: curCounts,
+          backgroundColor: "#e05a5a55",
+          borderColor: "#e05a5a",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { color: "#8b93a7", maxTicksLimit: 24 }, grid: { color: "#232b3d" } },
+        y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
+      },
+      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+    },
+  });
+}
+
 async function load() {
   statusEl.textContent = "Frissítés...";
   try {
@@ -158,6 +349,11 @@ async function load() {
     renderDailyChart(series);
     renderWeekdayChart(series);
     renderHourChart(entries);
+
+    const { prevYear, prevMonth, curYear, curMonth } = renderMonthCompareSummary(entries);
+    renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth);
+    renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth);
+    renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth);
 
     statusEl.textContent = "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
   } catch (e) {

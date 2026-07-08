@@ -169,6 +169,94 @@ function hourOfDayCounts(entries) {
   return counts;
 }
 
+// --- Honap-osszehasonlito segedfuggvenyek (stats.html "Honap osszehasonlitas"
+// panel) - elozo honap vs. jelenlegi (esetleg meg nem teljes) honap, napi/
+// heti/orankenti bontasban. Mind UTC naptari honap szerint szamol.
+
+function monthBounds(year, monthIndex0) {
+  const start = new Date(Date.UTC(year, monthIndex0, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(year, monthIndex0 + 1, 1, 0, 0, 0)); // kizarolag also hatar a kovetkezo honap eleje
+  return { start, end };
+}
+
+// Egy adott honap osszefoglaloja: hany tweet volt, es ebbol napi/heti/orankenti
+// atlag. Ha a honap meg nem ert veget (jelenlegi honap), csak az eddig eltelt
+// napokra szamol atlagot, es a "projectedMonthTotal" a jelenlegi tempo alapjan
+// becsult teljes havi osszeget adja (hogy a mar lezart elozo honappal
+// osszehasonlithato legyen).
+function summarizeMonth(entries, year, monthIndex0, nowMs) {
+  const { start, end } = monthBounds(year, monthIndex0);
+  const effectiveEndMs = Math.min(end.getTime(), nowMs);
+  const isOngoing = effectiveEndMs < end.getTime() && effectiveEndMs > start.getTime();
+  const daysElapsed = Math.max((effectiveEndMs - start.getTime()) / 86400000, 0);
+  const totalDaysInMonth = Math.round((end.getTime() - start.getTime()) / 86400000);
+
+  let count = 0;
+  for (const e of entries) {
+    const t = new Date(e.created_at).getTime();
+    if (t >= start.getTime() && t < effectiveEndMs) count++;
+  }
+
+  const avgPerDay = daysElapsed > 0 ? count / daysElapsed : 0;
+  const avgPerWeek = avgPerDay * 7;
+  const avgPerHour = avgPerDay / 24;
+  const projectedMonthTotal = isOngoing ? avgPerDay * totalDaysInMonth : count;
+
+  return {
+    year, monthIndex0, start, end, daysElapsed, totalDaysInMonth, isOngoing,
+    count, avgPerDay, avgPerWeek, avgPerHour, projectedMonthTotal,
+  };
+}
+
+// Napi bontas a honapon belul, index 0 = a honap 1. napja. Csak az adott
+// honapba eso bejegyzeseket szamolja.
+function dayOfMonthCounts(entries, year, monthIndex0) {
+  const { start, end } = monthBounds(year, monthIndex0);
+  const daysInMonth = Math.round((end.getTime() - start.getTime()) / 86400000);
+  const counts = new Array(daysInMonth).fill(0);
+  for (const e of entries) {
+    const t = new Date(e.created_at).getTime();
+    if (t >= start.getTime() && t < end.getTime()) {
+      const dayIdx = Math.floor((t - start.getTime()) / 86400000);
+      counts[dayIdx] += 1;
+    }
+  }
+  return counts;
+}
+
+// Orankenti (UTC) eloszlas, de csak az adott naptari honapba eso bejegyzesekre.
+function hourOfDayCountsForMonth(entries, year, monthIndex0) {
+  const { start, end } = monthBounds(year, monthIndex0);
+  const counts = new Array(24).fill(0);
+  for (const e of entries) {
+    const t = new Date(e.created_at).getTime();
+    if (t >= start.getTime() && t < end.getTime()) {
+      counts[new Date(e.created_at).getUTCHours()] += 1;
+    }
+  }
+  return counts;
+}
+
+// A honapon beluli napi bontast 7-napos "hetekre" osztja (1-7. nap = 1. het,
+// stb.) - naptari ISO-het helyett egyszeru, honapon beluli sorszamozas, hogy
+// ne kelljen honaphatarokon atnyulo reszleges hetekkel bajlodni.
+function weekOfMonthCounts(dayCounts) {
+  const weeks = [];
+  for (let i = 0; i < dayCounts.length; i += 7) {
+    weeks.push(dayCounts.slice(i, i + 7).reduce((a, b) => a + b, 0));
+  }
+  return weeks;
+}
+
+// Egy szamsorozatot adott hosszra egeszit ki null-lal (nem 0-val!), hogy egy
+// rovidebb honap (pl. februar) ne rajzoljon hamis nulla-oszlopokat a hosszabb
+// honap (pl. januar) napjaihoz igazitott grafikonon.
+function padSeries(arr, length) {
+  const out = arr.slice();
+  while (out.length < length) out.push(null);
+  return out;
+}
+
 async function fetchSentAlertComboKeys() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/sent_alerts?select=combo_key`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },

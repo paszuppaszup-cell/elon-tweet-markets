@@ -37,23 +37,48 @@
   </div>
 
   <div class="panel">
-    <h3 style="margin-top:0;">Napi tweet-szám (7 napos mozgóátlaggal)</h3>
+    <h3 style="margin-top:0;">Hónap összehasonlítás</h3>
+    <p class="muted" style="font-size:13px;">
+      Az előző (teljes) naptári hónap és a jelenlegi (esetleg még nem teljes) hónap
+      napi/heti/órás tempója egymás mellett. A folyamatban lévő hónapnál a becslés
+      a mostani tempó alapján számol teljes havi összeget.
+    </p>
+    <div id="monthCompareBox"><p class="loading">Betöltés...</p></div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Napi bontás a hónapban (a hónap napjai szerint)</h3>
+    <canvas id="dayOfMonthChart" height="80"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Heti bontás a hónapban</h3>
+    <canvas id="weekOfMonthChart" height="70"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Órás eloszlás összehasonlítása (UTC)</h3>
+    <canvas id="hourCompareChart" height="70"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Napi tweet-szám (teljes előzmény, 7 napos mozgóátlaggal)</h3>
     <canvas id="dailyChart" height="90"></canvas>
   </div>
 
   <div class="panel">
-    <h3 style="margin-top:0;">Átlag tweet/nap a hét napjai szerint (UTC)</h3>
+    <h3 style="margin-top:0;">Átlag tweet/nap a hét napjai szerint (teljes előzmény, UTC)</h3>
     <canvas id="weekdayChart" height="70"></canvas>
   </div>
 
   <div class="panel">
-    <h3 style="margin-top:0;">Óránkénti eloszlás (UTC)</h3>
+    <h3 style="margin-top:0;">Óránkénti eloszlás (teljes előzmény, UTC)</h3>
     <canvas id="hourChart" height="70"></canvas>
   </div>
 </main>
 <footer>Adatok: xtracker.polymarket.com (nyilvános). A napló a bot indítása előtti időszakra is tartalmaz visszatöltött adatot.</footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" integrity="sha384-b0GXujLkk9eYYSmcSfoyZbfyElGAQnDyY0skCHSG6w3JgTMFnz11ggrTAr7seu9f" crossorigin="anonymous"></script>
-<script src="js/api.js?v=9"></script>
-<script src="js/stats.js?v=1"></script>
+<script src="js/api.js?v=10"></script>
+<script src="js/stats.js?v=2"></script>
 </body>
 </html>
