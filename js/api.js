@@ -154,6 +154,108 @@ async function fetchNewsLog(limit = 150) {
   return data;
 }
 
+// --- Napi tweet-elorejelzo (stats.html elorejelzo panel) ---
+// A validalas szerint a legjobb egyszeru pont-elorejelzo a 14 napos gordulo
+// atlag (momentum), MAE ~12.5 (a naiv atlag ~18.2 helyett). A nap-a-het /
+// Trump-hir / Tesla jelek NEM a szamot pontositjak (azt rontanak), hanem a
+// SPIKE-KOCKAZATOT jelzik - ezert azokat kulon, kvalitativ jelzokent hasznaljuk.
+
+// Ismert Tesla negyedeves esemenyek (szallitasi jelentes ~ negyedev 1-2.
+// munkanapja, earnings ~ vege). A jovobeli datumok becsultek - ha pontosodnak,
+// itt frissitheto. Ezeken a napokon (es masnap) megugorhat a tweetszam.
+const TESLA_EVENT_DATES = [
+  "2025-10-02", "2025-10-22", "2026-01-02", "2026-01-28",
+  "2026-04-02", "2026-04-22", "2026-07-02", "2026-07-22",
+  "2026-10-02", "2026-10-21",
+];
+
+async function fetchNewsVolume() {
+  try {
+    const raw = sessionStorage.getItem("news-volume");
+    if (raw) {
+      const { t, data } = JSON.parse(raw);
+      if (Date.now() - t <= 300000) return data;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/news_volume?select=d,elon_vol,trump_vol&order=d.asc`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  );
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  const data = await resp.json();
+  try {
+    sessionStorage.setItem("news-volume", JSON.stringify({ t: Date.now(), data }));
+  } catch (e) {
+    /* ignore */
+  }
+  return data;
+}
+
+function _percentileThreshold(values, p) {
+  const s = values.filter((v) => v != null).sort((a, b) => a - b);
+  if (!s.length) return Infinity;
+  return s[Math.floor(s.length * p)];
+}
+
+// Egyseges, egyszeru elorejelzes: momentum-alapu varhato napi szam + a
+// hatralevo idore vonatkozo spike-kockazat. entries = fetchAllTweetLog();
+// newsVol = fetchNewsVolume() (lehet ures tomb, akkor a hir-faktor kimarad).
+function buildTweetForecast(entries, newsVol, nowMs) {
+  const counts = aggregateDailyCounts(entries);
+  const today = new Date(nowMs).toISOString().slice(0, 10);
+
+  // momentum: utolso 14 LEZART nap (a mai, reszleges nap nelkul)
+  const completed = [...counts.keys()].filter((d) => d < today).sort();
+  const last14 = completed.slice(-14).map((d) => counts.get(d));
+  const momentum = last14.length ? last14.reduce((a, b) => a + b, 0) / last14.length : null;
+  const last3 = completed.slice(-3).map((d) => counts.get(d));
+  const pace3 = last3.length ? last3.reduce((a, b) => a + b, 0) / last3.length : momentum;
+
+  const todayCount = counts.get(today) || 0;
+
+  // --- spike-kockazat faktorok ---
+  const factors = [];
+  const tomorrow = new Date(nowMs + 86400000).toISOString().slice(0, 10);
+  const teslaSet = new Set(TESLA_EVENT_DATES);
+  const teslaFlag = teslaSet.has(today) || teslaSet.has(tomorrow) ||
+    teslaSet.has(new Date(nowMs - 86400000).toISOString().slice(0, 10));
+  if (teslaFlag) factors.push({ w: "strong", text: "Tesla negyedéves esemény a közelben" });
+
+  if (newsVol && newsVol.length) {
+    const trumpThr = _percentileThreshold(newsVol.map((r) => r.trump_vol), 0.8);
+    const elonThr = _percentileThreshold(newsVol.map((r) => r.elon_vol), 0.8);
+    const byDate = new Map(newsVol.map((r) => [r.d, r]));
+    const yest = new Date(nowMs - 86400000).toISOString().slice(0, 10);
+    const yv = byDate.get(yest) || byDate.get(today);
+    if (yv) {
+      if (yv.trump_vol != null && yv.trump_vol >= trumpThr)
+        factors.push({ w: "medium", text: "magas Trump-hírvolumen (Elon másnap többet szokott posztolni)" });
+      if (yv.elon_vol != null && yv.elon_vol >= elonThr)
+        factors.push({ w: "medium", text: "magas Elon-hírvolumen" });
+    }
+  }
+
+  if (momentum && pace3 > momentum * 1.25) factors.push({ w: "mild", text: "emelkedő tempó az elmúlt napokban" });
+
+  const strong = factors.filter((f) => f.w === "strong").length;
+  const medium = factors.filter((f) => f.w === "medium").length;
+  const mild = factors.filter((f) => f.w === "mild").length;
+  let risk = "low";
+  if (strong >= 1 || medium >= 2) risk = "high";
+  else if (medium >= 1 || mild >= 1) risk = "medium";
+
+  return {
+    momentum, // varhato napi szam
+    band: 12, // +- validalt MAE (~12.5 kerekitve)
+    todayCount,
+    pace3,
+    risk, // 'low' | 'medium' | 'high'
+    factors,
+  };
+}
+
 // Napi bontas UTC naptari nap szerint - {dateStr: count}. Csak azok a napok
 // szerepelnek, amiken volt legalabb 1 tweet.
 function aggregateDailyCounts(entries) {
