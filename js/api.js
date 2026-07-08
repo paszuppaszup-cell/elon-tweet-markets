@@ -179,6 +179,25 @@ function monthBounds(year, monthIndex0) {
   return { start, end };
 }
 
+// Az utolso `count` naptari honapot adja vissza (regi->uj sorrendben, az
+// utolso elem mindig a jelenlegi honap) - a grafikonok tobb-honapos
+// osszehasonlitasahoz (lasd stats.js).
+function getRecentMonths(nowMs, count) {
+  const now = new Date(nowMs);
+  let year = now.getUTCFullYear();
+  let month = now.getUTCMonth();
+  const months = [];
+  for (let i = 0; i < count; i++) {
+    months.unshift({ year, monthIndex0: month });
+    month -= 1;
+    if (month < 0) {
+      month = 11;
+      year -= 1;
+    }
+  }
+  return months;
+}
+
 // Egy adott honap osszefoglaloja: hany tweet volt, es ebbol napi/heti/orankenti
 // atlag. Ha a honap meg nem ert veget (jelenlegi honap), csak az eddig eltelt
 // napokra szamol atlagot, es a "projectedMonthTotal" a jelenlegi tempo alapjan

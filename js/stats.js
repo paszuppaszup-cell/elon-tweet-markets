@@ -313,10 +313,13 @@ function renderMonthCompareSummary(entries) {
   return { prev, cur, prevYear, prevMonth, curYear, curMonth };
 }
 
-function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs) {
-  const prevCounts = dayOfMonthCounts(entries, prevYear, prevMonth, nowMs);
-  const curCounts = dayOfMonthCounts(entries, curYear, curMonth, nowMs);
-  const maxLen = Math.max(prevCounts.length, curCounts.length);
+// Regi->uj sorrendben: az utolso (jelenlegi honap) mindig a legszembetunobb
+// (kek), a korabbi honapok halvanyulo szurketol-liaig terjedo skalan.
+const MONTH_COMPARE_COLORS = ["#8b93a7", "#9b7fd4", "#f5b942", "#4f8cff"];
+
+function renderDayOfMonthChart(entries, months, nowMs) {
+  const seriesList = months.map((m) => dayOfMonthCounts(entries, m.year, m.monthIndex0, nowMs));
+  const maxLen = Math.max(...seriesList.map((s) => s.length));
   const labels = Array.from({ length: maxLen }, (_, i) => i + 1);
 
   const ctx = document.getElementById("dayOfMonthChart");
@@ -325,22 +328,13 @@ function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, 
     type: "bar",
     data: {
       labels,
-      datasets: [
-        {
-          label: monthLabel(prevYear, prevMonth),
-          data: padSeries(prevCounts, maxLen),
-          backgroundColor: "#8b93a755",
-          borderColor: "#8b93a7",
-          borderWidth: 1,
-        },
-        {
-          label: monthLabel(curYear, curMonth),
-          data: padSeries(curCounts, maxLen),
-          backgroundColor: "#4f8cff55",
-          borderColor: "#4f8cff",
-          borderWidth: 1,
-        },
-      ],
+      datasets: months.map((m, i) => ({
+        label: monthLabel(m.year, m.monthIndex0),
+        data: padSeries(seriesList[i], maxLen),
+        backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
+        borderColor: MONTH_COMPARE_COLORS[i],
+        borderWidth: 1,
+      })),
     },
     options: {
       responsive: true,
@@ -353,10 +347,9 @@ function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, 
   });
 }
 
-function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs) {
-  const prevWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, prevYear, prevMonth, nowMs));
-  const curWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, curYear, curMonth, nowMs));
-  const maxLen = Math.max(prevWeeks.length, curWeeks.length);
+function renderWeekOfMonthChart(entries, months, nowMs) {
+  const seriesList = months.map((m) => weekOfMonthCounts(dayOfMonthCounts(entries, m.year, m.monthIndex0, nowMs)));
+  const maxLen = Math.max(...seriesList.map((s) => s.length));
   const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}. hét`);
 
   const ctx = document.getElementById("weekOfMonthChart");
@@ -365,22 +358,13 @@ function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth,
     type: "bar",
     data: {
       labels,
-      datasets: [
-        {
-          label: monthLabel(prevYear, prevMonth),
-          data: padSeries(prevWeeks, maxLen),
-          backgroundColor: "#8b93a755",
-          borderColor: "#8b93a7",
-          borderWidth: 1,
-        },
-        {
-          label: monthLabel(curYear, curMonth),
-          data: padSeries(curWeeks, maxLen),
-          backgroundColor: "#2ecc7155",
-          borderColor: "#2ecc71",
-          borderWidth: 1,
-        },
-      ],
+      datasets: months.map((m, i) => ({
+        label: monthLabel(m.year, m.monthIndex0),
+        data: padSeries(seriesList[i], maxLen),
+        backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
+        borderColor: MONTH_COMPARE_COLORS[i],
+        borderWidth: 1,
+      })),
     },
     options: {
       responsive: true,
@@ -393,16 +377,15 @@ function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth,
   });
 }
 
-function renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth, prevDays, curDays) {
+function renderHourCompareChart(entries, months, nowMs) {
   // Nyers darabszam helyett napi atlag (darabszam / az adott honapban eddig
-  // eltelt napok) - kulonben a folyamatban levo (rovidebb) honap mindig
+  // eltelt napok) - kulonben egy rovidebb (pl. folyamatban levo) honap
   // aranytalanul kisebbnek latszana, csak azert, mert kevesebb nap telt el,
-  // nem pedig a napi ritmus miatt. Igy a ket honap kozvetlenul osszevetheto.
-  const prevRaw = hourOfDayCountsForMonth(entries, prevYear, prevMonth);
-  const curRaw = hourOfDayCountsForMonth(entries, curYear, curMonth);
-  const prevCounts = prevRaw.map((c) => (prevDays > 0 ? c / prevDays : 0));
-  const curCounts = curRaw.map((c) => (curDays > 0 ? c / curDays : 0));
-  const labels = prevRaw.map((_, h) => `${String(h).padStart(2, "0")}:00`);
+  // nem pedig a napi ritmus miatt. Igy minden honap kozvetlenul osszevetheto.
+  const daysElapsedList = months.map((m) => summarizeMonth(entries, m.year, m.monthIndex0, nowMs).daysElapsed);
+  const rawList = months.map((m) => hourOfDayCountsForMonth(entries, m.year, m.monthIndex0));
+  const perDayList = rawList.map((raw, i) => raw.map((c) => (daysElapsedList[i] > 0 ? c / daysElapsedList[i] : 0)));
+  const labels = rawList[0].map((_, h) => `${String(h).padStart(2, "0")}:00`);
 
   const ctx = document.getElementById("hourCompareChart");
   if (hourCompareChartInstance) hourCompareChartInstance.destroy();
@@ -410,22 +393,13 @@ function renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth,
     type: "bar",
     data: {
       labels,
-      datasets: [
-        {
-          label: monthLabel(prevYear, prevMonth),
-          data: prevCounts,
-          backgroundColor: "#8b93a755",
-          borderColor: "#8b93a7",
-          borderWidth: 1,
-        },
-        {
-          label: monthLabel(curYear, curMonth),
-          data: curCounts,
-          backgroundColor: "#e05a5a55",
-          borderColor: "#e05a5a",
-          borderWidth: 1,
-        },
-      ],
+      datasets: months.map((m, i) => ({
+        label: monthLabel(m.year, m.monthIndex0),
+        data: perDayList[i],
+        backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
+        borderColor: MONTH_COMPARE_COLORS[i],
+        borderWidth: 1,
+      })),
     },
     options: {
       responsive: true,
@@ -455,11 +429,12 @@ async function load() {
     renderWeekdayChart(series);
     renderHourChart(entries);
 
-    const { prev, cur, prevYear, prevMonth, curYear, curMonth } = renderMonthCompareSummary(entries);
+    renderMonthCompareSummary(entries);
     const nowMs = Date.now();
-    renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs);
-    renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs);
-    renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth, prev.daysElapsed, cur.daysElapsed);
+    const recentMonths = getRecentMonths(nowMs, 4);
+    renderDayOfMonthChart(entries, recentMonths, nowMs);
+    renderWeekOfMonthChart(entries, recentMonths, nowMs);
+    renderHourCompareChart(entries, recentMonths, nowMs);
 
     statusEl.textContent = "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
   } catch (e) {
