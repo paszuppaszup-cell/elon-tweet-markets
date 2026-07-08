@@ -215,9 +215,9 @@ function renderMonthCompareSummary(entries) {
   return { prev, cur, prevYear, prevMonth, curYear, curMonth };
 }
 
-function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth) {
-  const prevCounts = dayOfMonthCounts(entries, prevYear, prevMonth);
-  const curCounts = dayOfMonthCounts(entries, curYear, curMonth);
+function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs) {
+  const prevCounts = dayOfMonthCounts(entries, prevYear, prevMonth, nowMs);
+  const curCounts = dayOfMonthCounts(entries, curYear, curMonth, nowMs);
   const maxLen = Math.max(prevCounts.length, curCounts.length);
   const labels = Array.from({ length: maxLen }, (_, i) => i + 1);
 
@@ -255,9 +255,9 @@ function renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth) 
   });
 }
 
-function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth) {
-  const prevWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, prevYear, prevMonth));
-  const curWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, curYear, curMonth));
+function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs) {
+  const prevWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, prevYear, prevMonth, nowMs));
+  const curWeeks = weekOfMonthCounts(dayOfMonthCounts(entries, curYear, curMonth, nowMs));
   const maxLen = Math.max(prevWeeks.length, curWeeks.length);
   const labels = Array.from({ length: maxLen }, (_, i) => `${i + 1}. hét`);
 
@@ -295,10 +295,16 @@ function renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth)
   });
 }
 
-function renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth) {
-  const prevCounts = hourOfDayCountsForMonth(entries, prevYear, prevMonth);
-  const curCounts = hourOfDayCountsForMonth(entries, curYear, curMonth);
-  const labels = prevCounts.map((_, h) => `${String(h).padStart(2, "0")}:00`);
+function renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth, prevDays, curDays) {
+  // Nyers darabszam helyett napi atlag (darabszam / az adott honapban eddig
+  // eltelt napok) - kulonben a folyamatban levo (rovidebb) honap mindig
+  // aranytalanul kisebbnek latszana, csak azert, mert kevesebb nap telt el,
+  // nem pedig a napi ritmus miatt. Igy a ket honap kozvetlenul osszevetheto.
+  const prevRaw = hourOfDayCountsForMonth(entries, prevYear, prevMonth);
+  const curRaw = hourOfDayCountsForMonth(entries, curYear, curMonth);
+  const prevCounts = prevRaw.map((c) => (prevDays > 0 ? c / prevDays : 0));
+  const curCounts = curRaw.map((c) => (curDays > 0 ? c / curDays : 0));
+  const labels = prevRaw.map((_, h) => `${String(h).padStart(2, "0")}:00`);
 
   const ctx = document.getElementById("hourCompareChart");
   if (hourCompareChartInstance) hourCompareChartInstance.destroy();
@@ -350,10 +356,11 @@ async function load() {
     renderWeekdayChart(series);
     renderHourChart(entries);
 
-    const { prevYear, prevMonth, curYear, curMonth } = renderMonthCompareSummary(entries);
-    renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth);
-    renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth);
-    renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth);
+    const { prev, cur, prevYear, prevMonth, curYear, curMonth } = renderMonthCompareSummary(entries);
+    const nowMs = Date.now();
+    renderDayOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs);
+    renderWeekOfMonthChart(entries, prevYear, prevMonth, curYear, curMonth, nowMs);
+    renderHourCompareChart(entries, prevYear, prevMonth, curYear, curMonth, prev.daysElapsed, cur.daysElapsed);
 
     statusEl.textContent = "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");
   } catch (e) {

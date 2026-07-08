@@ -209,8 +209,12 @@ function summarizeMonth(entries, year, monthIndex0, nowMs) {
 }
 
 // Napi bontas a honapon belul, index 0 = a honap 1. napja. Csak az adott
-// honapba eso bejegyzeseket szamolja.
-function dayOfMonthCounts(entries, year, monthIndex0) {
+// honapba eso bejegyzeseket szamolja. Ha nowMs meg van adva, a meg el nem
+// kezdodott (jovobeli) napokat null-ra allitja - igy a grafikonon nem
+// jelennek meg hamis 0 oszlopkent (kulonbozik a "0 tweet ezen a napon" es a
+// "ez a nap meg el sem kezdodott" eset). A mar elkezdodott mai nap a valos,
+// eddigi (esetleg 0) szamat mutatja.
+function dayOfMonthCounts(entries, year, monthIndex0, nowMs) {
   const { start, end } = monthBounds(year, monthIndex0);
   const daysInMonth = Math.round((end.getTime() - start.getTime()) / 86400000);
   const counts = new Array(daysInMonth).fill(0);
@@ -219,6 +223,11 @@ function dayOfMonthCounts(entries, year, monthIndex0) {
     if (t >= start.getTime() && t < end.getTime()) {
       const dayIdx = Math.floor((t - start.getTime()) / 86400000);
       counts[dayIdx] += 1;
+    }
+  }
+  if (nowMs != null) {
+    for (let i = 0; i < daysInMonth; i++) {
+      if (start.getTime() + i * 86400000 > nowMs) counts[i] = null;
     }
   }
   return counts;
@@ -239,11 +248,15 @@ function hourOfDayCountsForMonth(entries, year, monthIndex0) {
 
 // A honapon beluli napi bontast 7-napos "hetekre" osztja (1-7. nap = 1. het,
 // stb.) - naptari ISO-het helyett egyszeru, honapon beluli sorszamozas, hogy
-// ne kelljen honaphatarokon atnyulo reszleges hetekkel bajlodni.
+// ne kelljen honaphatarokon atnyulo reszleges hetekkel bajlodni. A dayCounts
+// tartalmazhat null-t (jovobeli napok): egy teljesen jovobeli het (csupa null)
+// null lesz (nem rajzol oszlopot), egy reszben eltelt het a mar eltelt napok
+// osszeget mutatja.
 function weekOfMonthCounts(dayCounts) {
   const weeks = [];
   for (let i = 0; i < dayCounts.length; i += 7) {
-    weeks.push(dayCounts.slice(i, i + 7).reduce((a, b) => a + b, 0));
+    const chunk = dayCounts.slice(i, i + 7).filter((v) => v != null);
+    weeks.push(chunk.length ? chunk.reduce((a, b) => a + b, 0) : null);
   }
   return weeks;
 }
