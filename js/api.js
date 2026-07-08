@@ -26,6 +26,20 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// Csak http/https URL-eket enged at klikkelheto linkkent (pl. news.html
+// hir-linkjei, kulso RSS-forrasbol). escapeHtml onmagaban NEM eleg egy
+// href attributumhoz: egy "javascript:..." vagy "data:text/html,..." ertek
+// idezojel-torese nelkul is lefuthat kattintasra - ezt csak sema-ellenorzessel
+// lehet kizarni. Barmi, ami nem egyertelmuen http(s), nem jelenik meg linkkent.
+function isSafeHttpUrl(value) {
+  try {
+    const u = new URL(value, window.location.href);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch (e) {
+    return false;
+  }
+}
+
 async function fetchSharedConfig() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/alert_config?select=*`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
@@ -103,6 +117,41 @@ async function fetchAllTweetLog() {
     /* sessionStorage full/unavailable - ignore, csak nem cache-eljuk */
   }
   return all;
+}
+
+// --- Hirek (news.html) ---
+// A news_log tabla Elon Musk-hireket tarol (Google News RSS kereses alapjan,
+// EN+HU) - a Python news-sync bot tolti fel 10 percenkent. A weboldal csak
+// olvas belole (anon kulccsal). A tabla merete korlatos (a Google News
+// feedek kb. 100-100 friss tetelt adnak vissza esemenyenkent), ezert nincs
+// szukseg lapozasra, egy egyszeru limitalt lekerdezes eleg.
+const NEWS_LOG_CACHE_KEY = "news-log-latest";
+const NEWS_LOG_CACHE_TTL_MS = 120000; // 2 perc
+
+async function fetchNewsLog(limit = 150) {
+  try {
+    const raw = sessionStorage.getItem(NEWS_LOG_CACHE_KEY);
+    if (raw) {
+      const { t, data } = JSON.parse(raw);
+      if (Date.now() - t <= NEWS_LOG_CACHE_TTL_MS) return data;
+    }
+  } catch (e) {
+    /* sessionStorage corrupt/unavailable - csak ujra letoltjuk */
+  }
+
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/news_log?select=guid,title,link,source,lang,published_at&order=published_at.desc.nullslast&limit=${limit}`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  );
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  const data = await resp.json();
+
+  try {
+    sessionStorage.setItem(NEWS_LOG_CACHE_KEY, JSON.stringify({ t: Date.now(), data }));
+  } catch (e) {
+    /* sessionStorage full/unavailable - ignore */
+  }
+  return data;
 }
 
 // Napi bontas UTC naptari nap szerint - {dateStr: count}. Csak azok a napok
