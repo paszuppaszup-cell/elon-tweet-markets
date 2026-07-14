@@ -39,6 +39,7 @@ function renderSkeleton(event) {
         Zárás: ${new Date(event.endDate).toLocaleString("hu-HU")} ·
         Volumen: $${Number(event.volume || 0).toLocaleString("hu-HU", { maximumFractionDigits: 0 })}
       </p>
+      <p class="muted" id="headerLiveState" style="margin-top:4px;"></p>
       <div class="status-bar">
         <span id="statusText">Betöltés...</span>
         <button id="refreshBtn">Frissítés</button>
@@ -128,6 +129,28 @@ function sendSelectedToCalculator() {
   };
   localStorage.setItem("calc_prefill", JSON.stringify(payload));
   window.location.href = "calculator.html";
+}
+
+// Ugyanaz a rovid "Jelenleg X tweetnel tart / Y nap van hatra" sor, mint az
+// index.html kartyain (computeEventLiveState) - itt a fejlec-panelben
+// jelenik meg azonnal, meg mielott a lejjebbi reszletes "Elo tweet-szam"
+// panel (updateLiveCount) betoltene a savankenti bontast.
+async function updateHeaderLiveState(event) {
+  const el = document.getElementById("headerLiveState");
+  if (!el) return;
+  try {
+    const [posts, trackings] = await Promise.all([fetchElonPosts(), fetchElonTrackings()]);
+    const state = computeEventLiveState(event, posts, trackings);
+    if (state) {
+      el.innerHTML = `Jelenleg <b>${state.count}</b> tweetnél tart · <b>${
+        state.daysRemaining > 0 ? state.daysRemaining.toFixed(1) : "0"
+      } nap</b> van hátra`;
+    } else {
+      el.textContent = "";
+    }
+  } catch (e) {
+    el.textContent = "";
+  }
 }
 
 async function updateLiveCount(event, buckets) {
@@ -231,7 +254,7 @@ async function loadAndRender(isManualRefresh) {
       .filter((m) => m.prices.length && m.tokenIds.length);
 
     const sorted = renderBuckets(buckets);
-    await updateLiveCount(event, buckets);
+    await Promise.all([updateHeaderLiveState(event), updateLiveCount(event, buckets)]);
     if (isManualRefresh === undefined) {
       await renderChart(sorted.slice(0, 3));
     }
@@ -261,7 +284,7 @@ async function init() {
       .map(normalizeMarket)
       .filter((m) => m.prices.length && m.tokenIds.length);
     const sorted = renderBuckets(buckets);
-    await updateLiveCount(event, buckets);
+    await Promise.all([updateHeaderLiveState(event), updateLiveCount(event, buckets)]);
     await renderChart(sorted.slice(0, 3));
     document.getElementById("statusText").textContent =
       "Utolsó frissítés: " + new Date().toLocaleTimeString("hu-HU");

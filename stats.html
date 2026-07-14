@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Statisztika — Elon Musk Tweet Piacok</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
 <header class="top">
@@ -54,17 +54,17 @@
       napi/heti/órás tempója egymás mellett. A folyamatban lévő hónapnál a becslés
       a mostani tempó alapján számol teljes havi összeget.
     </p>
-    <div id="monthCompareBox"><p class="loading">Betöltés...</p></div>
+    <div class="table-scroll" id="monthCompareBox"><p class="loading">Betöltés...</p></div>
   </div>
 
   <div class="panel">
     <h3 style="margin-top:0;">Napi bontás — utolsó 4 hónap (a hónap napjai szerint)</h3>
-    <canvas id="dayOfMonthChart" height="80"></canvas>
+    <div class="chart-wrap"><canvas id="dayOfMonthChart"></canvas></div>
   </div>
 
   <div class="panel">
     <h3 style="margin-top:0;">Heti bontás — utolsó 4 hónap</h3>
-    <canvas id="weekOfMonthChart" height="70"></canvas>
+    <div class="chart-wrap"><canvas id="weekOfMonthChart"></canvas></div>
   </div>
 
   <div class="panel">
@@ -74,27 +74,27 @@
       vetítve), hogy a teljes hónapok és a folyamatban lévő hónap közvetlenül összevethetők
       legyenek, függetlenül attól, hány nap telt el.
     </p>
-    <canvas id="hourCompareChart" height="70"></canvas>
+    <div class="chart-wrap"><canvas id="hourCompareChart"></canvas></div>
   </div>
 
   <div class="panel">
     <h3 style="margin-top:0;">Napi tweet-szám (teljes előzmény, 7 napos mozgóátlaggal)</h3>
-    <canvas id="dailyChart" height="90"></canvas>
+    <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
   </div>
 
   <div class="panel">
     <h3 style="margin-top:0;">Átlag tweet/nap a hét napjai szerint (teljes előzmény, UTC)</h3>
-    <canvas id="weekdayChart" height="70"></canvas>
+    <div class="chart-wrap"><canvas id="weekdayChart"></canvas></div>
   </div>
 
   <div class="panel">
     <h3 style="margin-top:0;">Óránkénti eloszlás (teljes előzmény, UTC)</h3>
-    <canvas id="hourChart" height="70"></canvas>
+    <div class="chart-wrap"><canvas id="hourChart"></canvas></div>
   </div>
 </main>
 <footer>Adatok: xtracker.polymarket.com (nyilvános). A napló a bot indítása előtti időszakra is tartalmaz visszatöltött adatot.</footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" integrity="sha384-b0GXujLkk9eYYSmcSfoyZbfyElGAQnDyY0skCHSG6w3JgTMFnz11ggrTAr7seu9f" crossorigin="anonymous"></script>
-<script src="js/api.js?v=16"></script>
-<script src="js/stats.js?v=5"></script>
+<script src="js/api.js?v=17"></script>
+<script src="js/stats.js?v=7"></script>
 </body>
 </html>

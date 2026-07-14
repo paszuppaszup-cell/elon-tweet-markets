@@ -277,6 +277,22 @@ tr.live-match td:first-child::before {
 
 canvas { max-width: 100%; }
 
+/* A Chart.js canvas magassaga a "height" HTML attributumhoz ragad, ha nincs
+   sajat, CSS-vezerelt konteneremagassaga - keskeny (mobil) kepernyon ez a
+   szelesseg zsugorodasaval egyutt hasznalhatatlanul osszenyomja a
+   diagramokat (feliratok/legenda egymason, oszlopok alig lathatoak). Ez a
+   wrapper ad fix, kepernyomerettol fuggo magassagot, es a stats.js-ben
+   `maintainAspectRatio:false`-t hasznalunk, hogy a canvas ezt ki is toltse. */
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 260px;
+}
+
+@media (min-width: 640px) {
+  .chart-wrap { height: 300px; }
+}
+
 footer {
   text-align: center;
   color: var(--muted);
@@ -285,3 +301,24 @@ footer {
 }
 
 .loading { color: var(--muted); font-size: 14px; padding: 20px 0; }
+
+/* Ha egy tablazat cellaja (pl. a honap-osszehasonlito "107 eddig (becsult...)"
+   szoveg) nem torne sort, szelesebbre nyomhatna a tablazatot a panelnel -
+   ez a wrapper biztonsagosan oldalra gorgetheto teszi minden tablazatot
+   ahelyett, hogy az egesz oldalt tolna szet. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 640px) {
+  main { padding: 14px; }
+  header.top { padding: 12px 14px; }
+  header.top h1 { font-size: 16px; }
+  nav a { margin-left: 0; margin-right: 14px; font-size: 13px; }
+  .panel { padding: 14px; }
+  table { font-size: 13px; }
+  th, td { padding: 7px 6px; }
+  .result-card .value { font-size: 17px; }
+}

@@ -79,11 +79,12 @@ function renderDailyChart(series) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: "#8b93a7", maxTicksLimit: 16, autoSkip: true }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
       },
-      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+      plugins: { legend: { labels: COMPACT_LEGEND } },
     },
   });
 }
@@ -108,6 +109,7 @@ function renderWeekdayChart(series) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
@@ -138,6 +140,7 @@ function renderHourChart(entries) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: "#8b93a7", maxTicksLimit: 24 }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
@@ -365,6 +368,18 @@ function renderMonthCompareSummary(entries) {
 // (kek), a korabbi honapok halvanyulo szurketol-liaig terjedo skalan.
 const MONTH_COMPARE_COLORS = ["#8b93a7", "#9b7fd4", "#f5b942", "#4f8cff"];
 
+// Rovid honap-felirat a 4-honapos osszehasonlito grafikonok jelmagyarazatahoz
+// - a teljes "2026. julius" 4 darabbol mar nem fer ki egy sorba keskeny
+// (mobil) kepernyon, a Chart.js pedig 2 sorra tori, ami a szuk konteneren
+// belul ratolodhat a diagram tetejere. Rovidebb felirattal (pl. "aug '26")
+// tobbnyire egy sorban marad.
+const MONTH_ABBR_HU = ["jan", "febr", "márc", "ápr", "máj", "jún", "júl", "aug", "szept", "okt", "nov", "dec"];
+function monthLabelShort(year, monthIndex0) {
+  return `${MONTH_ABBR_HU[monthIndex0]} '${String(year).slice(2)}`;
+}
+
+const COMPACT_LEGEND = { color: "#e6e9f0", boxWidth: 10, font: { size: 10 }, padding: 6 };
+
 function renderDayOfMonthChart(entries, months, nowMs) {
   const seriesList = months.map((m) => dayOfMonthCounts(entries, m.year, m.monthIndex0, nowMs));
   const maxLen = Math.max(...seriesList.map((s) => s.length));
@@ -377,7 +392,7 @@ function renderDayOfMonthChart(entries, months, nowMs) {
     data: {
       labels,
       datasets: months.map((m, i) => ({
-        label: monthLabel(m.year, m.monthIndex0),
+        label: monthLabelShort(m.year, m.monthIndex0),
         data: padSeries(seriesList[i], maxLen),
         backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
         borderColor: MONTH_COMPARE_COLORS[i],
@@ -386,11 +401,12 @@ function renderDayOfMonthChart(entries, months, nowMs) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
-        x: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
+        x: { ticks: { color: "#8b93a7", maxTicksLimit: 10, autoSkip: true }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
       },
-      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+      plugins: { legend: { labels: COMPACT_LEGEND } },
     },
   });
 }
@@ -407,7 +423,7 @@ function renderWeekOfMonthChart(entries, months, nowMs) {
     data: {
       labels,
       datasets: months.map((m, i) => ({
-        label: monthLabel(m.year, m.monthIndex0),
+        label: monthLabelShort(m.year, m.monthIndex0),
         data: padSeries(seriesList[i], maxLen),
         backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
         borderColor: MONTH_COMPARE_COLORS[i],
@@ -416,11 +432,12 @@ function renderWeekOfMonthChart(entries, months, nowMs) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
       },
-      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+      plugins: { legend: { labels: COMPACT_LEGEND } },
     },
   });
 }
@@ -442,7 +459,7 @@ function renderHourCompareChart(entries, months, nowMs) {
     data: {
       labels,
       datasets: months.map((m, i) => ({
-        label: monthLabel(m.year, m.monthIndex0),
+        label: monthLabelShort(m.year, m.monthIndex0),
         data: perDayList[i],
         backgroundColor: MONTH_COMPARE_COLORS[i] + "55",
         borderColor: MONTH_COMPARE_COLORS[i],
@@ -451,11 +468,12 @@ function renderHourCompareChart(entries, months, nowMs) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: "#8b93a7", maxTicksLimit: 24 }, grid: { color: "#232b3d" } },
         y: { ticks: { color: "#8b93a7" }, grid: { color: "#232b3d" }, beginAtZero: true },
       },
-      plugins: { legend: { labels: { color: "#e6e9f0" } } },
+      plugins: { legend: { labels: COMPACT_LEGEND } },
     },
   });
 }
