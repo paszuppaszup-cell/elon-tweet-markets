@@ -536,6 +536,41 @@ function buildMonthInsights(entries, nowMs) {
   };
 }
 
+// --- Kovetett kereskedok (account.html) ---
+// Olvasas anon kulccsal (RLS: anon read). Iras KIZAROLAG a PIN-vedett
+// manage_followed_trader RPC-n keresztul - ugyanaz a PIN es ugyanaz az 5
+// probalkozas / 15 perc zarolas, mint a megosztott konfiguracional.
+async function fetchFollowedTraders() {
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/followed_traders?select=address,label,notify&order=created_at.asc`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+  );
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  return resp.json();
+}
+
+// action: 'add' | 'update' | 'remove'. Visszaad true/false-t (false = rossz
+// vagy zarolt PIN, illetve ervenytelen cim).
+async function manageFollowedTrader(pin, action, address, label, notify) {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/manage_followed_trader`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      p_pin: pin,
+      p_action: action,
+      p_address: address,
+      p_label: label ?? null,
+      p_notify: notify,
+    }),
+  });
+  if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
+  return resp.json();
+}
+
 async function fetchSentAlertComboKeys() {
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/sent_alerts?select=combo_key`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },

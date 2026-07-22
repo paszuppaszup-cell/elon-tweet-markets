@@ -181,3 +181,166 @@ const stored = getStoredAddress();
 if (stored) {
   loadAccount(stored);
 }
+
+// ---------------------------------------------------------------------------
+// Kovetett kereskedok: lista + Telegram kapcsolo + friss tradejeik.
+// A lista Supabase-ben van (a bot is ezt olvassa), ezert az iras PIN-vedett.
+// ---------------------------------------------------------------------------
+
+const followErrorBox = document.getElementById("followErrorBox");
+const followListEl = document.getElementById("followList");
+const followPinEl = document.getElementById("followPin");
+
+const TRADES_PER_TRADER = 5;
+
+function shortAddr(a) {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+function followError(msg) {
+  followErrorBox.innerHTML = `<div class="error-box">${escapeHtml(msg)}</div>`;
+}
+
+function requirePin() {
+  const pin = followPinEl.value.trim();
+  if (!pin) {
+    followError("Add meg a PIN-kódot a módosításhoz.");
+    return null;
+  }
+  return pin;
+}
+
+// A muvelet utan ne maradjon a PIN a mezoben.
+async function afterWrite(ok) {
+  if (!ok) {
+    followError("Hibás PIN (vagy 5 hibás próbálkozás után 15 perc zárolás), a mentés nem történt meg.");
+    return false;
+  }
+  followPinEl.value = "";
+  followErrorBox.innerHTML = "";
+  await loadFollowedTraders();
+  return true;
+}
+
+function renderTraderCard(t, trades) {
+  const name = t.label || (trades[0] && trades[0].pseudonym) || shortAddr(t.address);
+  const rows = trades.length
+    ? trades
+        .map(
+          (tr) => `
+        <tr>
+          <td class="muted">${new Date(tr.timestamp * 1000).toLocaleString("hu-HU")}</td>
+          <td style="color:${tr.side === "BUY" ? "var(--green)" : "var(--red)"};">
+            ${tr.side === "BUY" ? "Nyitás" : "Zárás"}
+          </td>
+          <td>${escapeHtml(tr.title || "?")}</td>
+          <td>${escapeHtml(tr.outcome || "?")}</td>
+          <td>${(Number(tr.price) * 100).toFixed(1)}c</td>
+          <td>${fmtUsd(Number(tr.size) * Number(tr.price))}</td>
+        </tr>`
+        )
+        .join("")
+    : '<tr><td colspan="6" class="muted">Nincs friss trade.</td></tr>';
+
+  return `
+    <div class="panel" style="background:#0f1420;margin-bottom:12px;">
+      <div class="card-head">
+        <h3 style="font-size:15px;">${escapeHtml(name)}
+          <span class="muted" style="font-weight:400;font-size:12px;">${shortAddr(t.address)}</span>
+        </h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <label class="chip chip-toggle ${t.notify ? "checked" : ""}" data-notify-addr="${escapeHtml(t.address)}">
+            <input type="checkbox" ${t.notify ? "checked" : ""}> Telegram
+          </label>
+          <button data-remove-addr="${escapeHtml(t.address)}" style="color:var(--red);">Törlés</button>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table>
+          <thead><tr><th>Idő</th><th>Irány</th><th>Piac</th><th>Kimenet</th><th>Ár</th><th>Érték</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function loadFollowedTraders() {
+  try {
+    const traders = await fetchFollowedTraders();
+    if (!traders.length) {
+      followListEl.innerHTML =
+        '<p class="muted">Még nincs követett kereskedő. Add hozzá egy publikus wallet-címét fent.</p>';
+      return;
+    }
+
+    // Minden kovetett cimhez lekerjuk a friss tradeket (parhuzamosan). Ha egy
+    // cim lekerese elhasal, az a kartya ures marad, a tobbi megjelenik.
+    const tradesList = await Promise.all(
+      traders.map((t) =>
+        fetchUserTrades(t.address, TRADES_PER_TRADER).catch(() => [])
+      )
+    );
+
+    followListEl.innerHTML = traders
+      .map((t, i) => renderTraderCard(t, tradesList[i] || []))
+      .join("");
+
+    followListEl.querySelectorAll("[data-notify-addr]").forEach((chip) => {
+      chip.querySelector("input").addEventListener("change", async (e) => {
+        const pin = requirePin();
+        if (!pin) {
+          e.target.checked = !e.target.checked; // vissza, amig nincs PIN
+          return;
+        }
+        const addr = chip.dataset.notifyAddr;
+        try {
+          const ok = await manageFollowedTrader(pin, "update", addr, null, e.target.checked);
+          if (!(await afterWrite(ok))) e.target.checked = !e.target.checked;
+        } catch (err) {
+          followError("Hiba mentés közben: " + err.message);
+          e.target.checked = !e.target.checked;
+        }
+      });
+    });
+
+    followListEl.querySelectorAll("[data-remove-addr]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const pin = requirePin();
+        if (!pin) return;
+        const addr = btn.dataset.removeAddr;
+        if (!confirm("Biztosan törlöd ezt a követett kereskedőt?")) return;
+        try {
+          await afterWrite(await manageFollowedTrader(pin, "remove", addr, null, null));
+        } catch (err) {
+          followError("Hiba törlés közben: " + err.message);
+        }
+      });
+    });
+  } catch (e) {
+    followListEl.innerHTML = `<div class="error-box">Nem sikerült betölteni a listát: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.getElementById("followAddBtn").addEventListener("click", async () => {
+  followErrorBox.innerHTML = "";
+  const addr = document.getElementById("followAddr").value.trim();
+  const label = document.getElementById("followLabel").value.trim();
+  if (!isValidPolygonAddress(addr)) {
+    followError("Érvénytelen cím — 0x-szal kezdődő, 42 karakteres Polygon címet adj meg.");
+    return;
+  }
+  const pin = requirePin();
+  if (!pin) return;
+  try {
+    const ok = await manageFollowedTrader(pin, "add", addr, label, true);
+    if (await afterWrite(ok)) {
+      document.getElementById("followAddr").value = "";
+      document.getElementById("followLabel").value = "";
+    }
+  } catch (e) {
+    followError("Hiba hozzáadás közben: " + e.message);
+  }
+});
+
+loadFollowedTraders();

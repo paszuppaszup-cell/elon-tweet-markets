@@ -47,9 +47,39 @@
   </div>
 
   <div id="accountContent"></div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Követett kereskedők</h3>
+    <p class="muted" style="font-size:13px;">
+      Adj hozzá bármilyen publikus Polymarket wallet-címet, és kövesd a kereskedéseit.
+      Ha a <b>Telegram</b> kapcsoló be van kapcsolva, a bot 10 percenként ellenőrzi, és
+      üzenetet küld, amikor az illető <b>új fogadást nyit</b> vagy <b>lezár</b> egyet.
+      A lista és a beállítás megosztott a bottal, ezért a mentéshez <b>PIN-kód kell</b>
+      (ugyanaz, mint a Javaslatok oldalon).
+    </p>
+    <div class="calc-grid">
+      <div class="field">
+        <label>Wallet cím (0x...)</label>
+        <input type="text" id="followAddr" placeholder="0x1234...abcd">
+      </div>
+      <div class="field">
+        <label>Becenév (opcionális)</label>
+        <input type="text" id="followLabel" placeholder="pl. Whale #1">
+      </div>
+      <div class="field">
+        <label>PIN</label>
+        <input type="password" id="followPin" inputmode="numeric" placeholder="••••">
+      </div>
+      <div class="field" style="justify-content:flex-end;display:flex;align-items:flex-end;">
+        <button id="followAddBtn">Hozzáadás</button>
+      </div>
+    </div>
+    <div id="followErrorBox"></div>
+    <div id="followList"><p class="loading">Betöltés...</p></div>
+  </div>
 </main>
 <footer>Adatok: Polymarket publikus Data API (data-api.polymarket.com), csak olvasás.</footer>
-<script src="js/api.js?v=17"></script>
-<script src="js/account.js?v=3"></script>
+<script src="js/api.js?v=18"></script>
+<script src="js/account.js?v=4"></script>
 </body>
 </html>
